@@ -1,0 +1,239 @@
+import React, { useEffect, useState } from 'react';
+import { Download, Edit2, Sliders, Wand2 } from 'lucide-react';
+import { GeneratedImage, ResultNodeData } from '../../types';
+import FixModelModal from '../modals/FixModelModal';
+import PreciseFixModal from '../modals/PreciseFixModal';
+import ContrastFixModal from '../modals/ContrastFixModal';
+import { useVisibility } from '../../utils/useVisibility';
+
+interface ResultNodeProps {
+  data: ResultNodeData;
+  updateData: (newData: Partial<ResultNodeData>) => void;
+  onSpawnNextNode: (
+    sourceImage: GeneratedImage,
+    instructions: string[],
+    type: 'fix' | 'precise' | 'contrast',
+    mask?: string,
+    refImage?: string
+  ) => void;
+}
+
+interface ActiveModalState {
+  type: 'fixModel' | 'precise' | 'contrast';
+  anchorRect: { left: number; top: number; width: number; height: number };
+}
+
+const ResultNode: React.FC<ResultNodeProps> = ({ data, updateData, onSpawnNextNode }) => {
+  const [selectedImage, setSelectedImage] = useState<GeneratedImage | null>(null);
+  const [activeModal, setActiveModal] = useState<ActiveModalState | null>(null);
+  const { targetRef, isVisible } = useVisibility({ rootMargin: '320px' });
+
+  useEffect(() => {
+    if (!selectedImage) return;
+    const refreshed = data.images.find((img) => img.id === selectedImage.id);
+    setSelectedImage(refreshed || null);
+  }, [data.images, selectedImage?.id]);
+
+  const handleFixModelConfirm = (newPrompts: string[]) => {
+    if (!selectedImage) return;
+    onSpawnNextNode(selectedImage, newPrompts, 'fix');
+    setActiveModal(null);
+  };
+
+  const handlePreciseConfirm = (mask: string, instruction: string) => {
+    if (!selectedImage) return;
+    onSpawnNextNode(selectedImage, [instruction], 'precise', mask);
+    setActiveModal(null);
+  };
+
+  const handleContrastConfirm = (mask: string, instruction: string, refImage: string) => {
+    if (!selectedImage) return;
+    onSpawnNextNode(selectedImage, [instruction], 'contrast', mask, refImage);
+    setActiveModal(null);
+  };
+
+  const openModal = (e: React.MouseEvent, type: ActiveModalState['type']) => {
+    e.stopPropagation();
+    const host = (e.currentTarget as HTMLElement).closest('[data-node-id]') as HTMLElement | null;
+    const rect = host?.getBoundingClientRect() || { left: 100, top: 100, width: 320, height: 200 };
+    setActiveModal({
+      type,
+      anchorRect: {
+        left: rect.left,
+        top: rect.top,
+        width: rect.width,
+        height: rect.height,
+      },
+    });
+  };
+
+  if (data.status === 'loading') {
+    return (
+      <div className="flex flex-col items-center justify-center h-full space-y-4 min-h-[200px]">
+        <div className="w-12 h-12 border-4 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
+        <p className="text-slate-400 animate-pulse">正在发挥创意...</p>
+      </div>
+    );
+  }
+
+  if (data.status === 'idle' && data.images.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-full text-slate-500 italic min-h-[150px]">
+        等待生成结果...
+      </div>
+    );
+  }
+
+  if (data.status === 'error') {
+    return (
+      <div className="flex items-center justify-center h-full text-red-400 italic min-h-[150px]">
+        生成失败，请重试。
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div ref={targetRef} className="grid grid-cols-1 gap-4">
+        {isVisible ? (
+          data.images.map((img) => {
+            const isActive = selectedImage?.id === img.id;
+            const borderColor = img.lineageColor || (isActive ? '#3b82f6' : 'transparent');
+
+            return (
+              <div
+                key={img.id}
+                className="relative group rounded-2xl border-2 transition-all duration-300 cursor-pointer shrink-0 bg-black/30"
+                style={{
+                  borderColor: isActive ? borderColor : 'rgba(0,0,0,0.1)',
+                  boxShadow: isActive ? `0 0 0 4px ${borderColor}33` : 'none',
+                }}
+                onClick={() => setSelectedImage(img)}
+              >
+                {img.url ? (
+                  <div className="w-full bg-slate-900/40">
+                    <img
+                      src={img.url}
+                      alt={img.prompt || 'Generated image'}
+                      className="w-full h-auto block"
+                      loading="lazy"
+                      decoding="async"
+                      onError={(e) => {
+                        console.error('[ResultNode] Image load error:', img.url);
+                        (e.target as HTMLImageElement).style.display = 'none';
+                        const parent = (e.target as HTMLElement).parentElement;
+                        if (parent) {
+                          const errorDiv = document.createElement('div');
+                          errorDiv.className =
+                            'w-full py-10 bg-red-100 flex items-center justify-center text-red-600 text-xs p-2 text-center rounded-lg';
+                          errorDiv.textContent = '图片加载失败';
+                          parent.appendChild(errorDiv);
+                        }
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <div className="w-full py-10 bg-gray-200 flex items-center justify-center text-gray-600 text-sm font-semibold">
+                    图片预览
+                  </div>
+                )}
+                <div className="bg-gray-100/90 p-4 pt-4 text-xs text-black">
+                  <div className="flex items-center justify-between">
+                    <p className="truncate font-bold text-gray-900 flex-1">{img.model}</p>
+                    {img.url && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const link = document.createElement('a');
+                          link.href = img.url;
+                          link.download = `generated-${img.id}.png`;
+                          link.click();
+                        }}
+                        className="p-1 hover:bg-gray-200 rounded transition"
+                        title="下载图片"
+                      >
+                        <Download size={14} className="text-gray-600" />
+                      </button>
+                    )}
+                  </div>
+                  <p className="truncate opacity-75 text-[10px] text-gray-700">{img.prompt}</p>
+                </div>
+              </div>
+            );
+          })
+        ) : (
+          <div className="rounded-2xl border-2 border-dashed border-gray-700 bg-black/20 text-gray-300 text-xs flex flex-col items-center justify-center min-h-[120px]">
+            <p className="font-semibold text-gray-100">离屏暂停渲染</p>
+            <p className="opacity-70">{data.images.length} 张结果</p>
+          </div>
+        )}
+      </div>
+
+      {selectedImage && (
+        <div className="flex flex-col gap-3 pt-3 border-t border-gray-700 shrink-0">
+          <p className="text-[10px] text-gray-500 text-center uppercase tracking-widest font-bold">Actions</p>
+          <div className="grid grid-cols-3 gap-2">
+            <button
+              onClick={(e) => openModal(e, 'fixModel')}
+              className="flex flex-col items-center justify-center p-3 bg-black/20 hover:bg-black/40 rounded-xl gap-2 transition group"
+              title="固定 Prompt 并优化"
+            >
+              <div className="p-2 rounded-full bg-purple-500/20 text-purple-400 group-hover:bg-purple-500 group-hover:text-white transition-colors">
+                <Wand2 size={14} />
+              </div>
+              <span className="text-[10px] font-medium">Refine</span>
+            </button>
+            <button
+              onClick={(e) => openModal(e, 'precise')}
+              className="flex flex-col items-center justify-center p-3 bg-black/20 hover:bg-black/40 rounded-xl gap-2 transition group"
+              title="局部重绘 (Inpainting)"
+            >
+              <div className="p-2 rounded-full bg-blue-500/20 text-blue-400 group-hover:bg-blue-500 group-hover:text-white transition-colors">
+                <Edit2 size={14} />
+              </div>
+              <span className="text-[10px] font-medium">Inpaint</span>
+            </button>
+            <button
+              onClick={(e) => openModal(e, 'contrast')}
+              className="flex flex-col items-center justify-center p-3 bg-black/20 hover:bg-black/40 rounded-xl gap-2 transition group"
+              title="参考图迁移"
+            >
+              <div className="p-2 rounded-full bg-green-500/20 text-green-400 group-hover:bg-green-500 group-hover:text-white transition-colors">
+                <Sliders size={14} />
+              </div>
+              <span className="text-[10px] font-medium">Remix</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {selectedImage && activeModal && (
+        <>
+          <FixModelModal
+            isOpen={activeModal.type === 'fixModel'}
+            onClose={() => setActiveModal(null)}
+            originalPrompt={selectedImage.prompt}
+            onConfirm={handleFixModelConfirm}
+            anchorRect={activeModal.anchorRect}
+          />
+          <PreciseFixModal
+            isOpen={activeModal.type === 'precise'}
+            onClose={() => setActiveModal(null)}
+            imageUrl={selectedImage.url}
+            onConfirm={handlePreciseConfirm}
+            anchorRect={activeModal.anchorRect}
+          />
+          <ContrastFixModal
+            isOpen={activeModal.type === 'contrast'}
+            onClose={() => setActiveModal(null)}
+            originalImageUrl={selectedImage.url}
+            onConfirm={handleContrastConfirm}
+            anchorRect={activeModal.anchorRect}
+          />
+        </>
+      )}
+    </div>
+  );
+};
+
+export default ResultNode;

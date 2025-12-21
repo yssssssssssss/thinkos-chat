@@ -1,0 +1,5 @@
+{
+  "name": "GeminiFlow Canvas",
+  "description": "A node-based generative AI workflow editor similar to ComfyUI, powered by Google Gemini. Supports image generation, prompt iteration, inpainting, and reference-based editing.",
+  "requestFramePermissions": []
+}
