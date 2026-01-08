@@ -137,6 +137,7 @@ type GeminiPart = {
   inline_data?: GeminiInlineData;
   inlineData?: GeminiInlineData;
   file_data?: { mime_type?: string; mimeType?: string; file_uri: string };
+  fileData?: { mime_type?: string; mimeType?: string; fileUri: string };
 };
 
 type GeminiContents = { role: string; parts: GeminiPart[] } | Array<{ role: string; parts: GeminiPart[] }>;
@@ -150,36 +151,159 @@ interface GeminiImageRequest {
   stream: boolean;
 }
 
+const buildGeminiImagePart = (value: string, isJdcloud: boolean): GeminiPart | null => {
+  const trimmed = (value || '').trim();
+  if (!trimmed) return null;
 
-/**
- * 即梦 (Doubao Seedream) 图片生成 API
- * API 端点: http://ai-api.jdcloud.com/v1/imageEdit/generations
- */
-const generateImageWithJimeng = async (
-  prompt: string,
-  inputImage?: ImageInput,
-  model: string = 'doubao-seedream-4-0-250828'
-): Promise<string> => {
+  if (isHttpUrl(trimmed)) {
+    return isJdcloud
+      ? {
+          file_data: {
+            mime_type: 'image/png',
+            file_uri: trimmed
+          }
+        }
+      : {
+          fileData: {
+            mimeType: 'image/png',
+            fileUri: trimmed
+          }
+        };
+  }
+
+  const normalized = normalizeSeedreamImageValue(trimmed);
+  const base64Data = extractBase64Data(normalized);
+  const mimeType = extractMimeType(normalized);
+  const inline = {
+    ...(isJdcloud ? { mime_type: mimeType } : { mimeType }),
+    data: base64Data
+  };
+  return isJdcloud ? { inline_data: inline } : { inlineData: inline };
+};
+
+const extractImageFromParts = (parts?: GeminiPart[] | GeminiPart): string | null => {
+  if (!parts) return null;
+  const list = Array.isArray(parts) ? parts : [parts];
+
+  for (const part of list) {
+    if (!part) continue;
+
+    const inline = part.inline_data || part.inlineData;
+    if (inline?.data) {
+      const mimeType = inline.mime_type || inline.mimeType || 'image/png';
+      return ensureDataUrl(inline.data, mimeType);
+    }
+
+    const fileData = part.file_data || part.fileData;
+    if (fileData) {
+      const uri = (fileData as any).file_uri || fileData.fileUri;
+      if (typeof uri === 'string' && uri.trim()) {
+        return ensureDataUrl(uri.trim());
+      }
+    }
+
+    const fallbackUrl = (part as any).image_url || (part as any).imageUrl || (part as any).url;
+    if (typeof fallbackUrl === 'string' && fallbackUrl.trim()) {
+      return ensureDataUrl(fallbackUrl.trim());
+    }
+  }
+
+  return null;
+};
+
+const pickFirstImageField = (source: any, keys: string[]): string | null => {
+  if (!source || typeof source !== 'object') return null;
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === 'string' && value.trim()) {
+      return ensureDataUrl(value.trim());
+    }
+  }
+  return null;
+};
+
+const extractImageFromGeminiResponse = (data: any): string | null => {
+  if (!data) return null;
+
+  if (Array.isArray(data?.data) && data.data.length > 0) {
+    const first = data.data[0] || {};
+    const fromData = pickFirstImageField(first, ['b64_json', 'image', 'image_base64', 'base64', 'b64', 'data', 'url']);
+    if (fromData) return fromData;
+  }
+
+  if (Array.isArray(data?.candidates)) {
+    for (const candidate of data.candidates) {
+      const extracted = extractImageFromParts(candidate?.content?.parts);
+      if (extracted) return extracted;
+    }
+  }
+
+  const fromResult = pickFirstImageField(data?.result, ['image', 'b64_json', 'image_base64']);
+  if (fromResult) return fromResult;
+
+  const fromImageField = pickFirstImageField(data, ['image', 'image_base64', 'b64_json', 'url']);
+  if (fromImageField) return fromImageField;
+
+  if (Array.isArray(data?.predictions)) {
+    for (const prediction of data.predictions) {
+      const direct = pickFirstImageField(prediction, ['image', 'image_base64', 'b64_json', 'url']);
+      if (direct) return direct;
+      const viaParts = extractImageFromParts(prediction?.content);
+      if (viaParts) return viaParts;
+    }
+  }
+
+  if (Array.isArray(data?.output)) {
+    for (const output of data.output) {
+      const direct = pickFirstImageField(output, ['image', 'image_base64', 'b64_json', 'url']);
+      if (direct) return direct;
+      const viaParts = extractImageFromParts(output?.content);
+      if (viaParts) return viaParts;
+    }
+  }
+
+  if (typeof data === 'string' && data.trim()) {
+    return ensureDataUrl(data.trim());
+  }
+
+  return null;
+};
+
+
+const extractJimengImageFromResponse = (data: any): string | null => {
+  if (data?.data && Array.isArray(data.data) && data.data.length > 0) {
+    const imageData = data.data[0];
+
+    if (imageData.url) {
+      console.log('[Jimeng Image Service] Found URL:', imageData.url);
+      return ensureDataUrl(imageData.url, 'image/png');
+    }
+
+    if (imageData.b64_json) {
+      console.log('[Jimeng Image Service] Found b64_json');
+      return ensureDataUrl(imageData.b64_json, 'image/png');
+    }
+
+    for (const key of ['image', 'base64', 'b64', 'data'] as const) {
+      const value = (imageData as any)[key];
+      if (typeof value === 'string' && value.trim()) {
+        console.log('[Jimeng Image Service] Found image string field:', key);
+        return ensureDataUrl(value.trim(), 'image/png');
+      }
+    }
+  }
+
+  if (typeof data === 'string' && data.trim()) {
+    console.log('[Jimeng Image Service] Found string response');
+    return ensureDataUrl(data.trim(), 'image/png');
+  }
+
+  return null;
+};
+
+const requestJimengImage = async (requestBody: Record<string, unknown>, action: string): Promise<string> => {
   const apiUrl = getJimengApiUrl();
   const apiKey = getApiKey();
-
-  console.log('[Jimeng Image Service] Generating image:', { model, prompt: prompt.slice(0, 50) });
-
-  const buildJimengImagePayload = (): Record<string, unknown> => {
-    const inputs = toImageInputList(inputImage).map(normalizeSeedreamImageValue).filter(Boolean);
-    if (!inputs.length) return {};
-    return { image: inputs.length === 1 ? inputs[0] : inputs };
-  };
-
-  const requestBody = {
-    model,
-    prompt,
-    ...buildJimengImagePayload(),
-    size: '2K',
-    sequential_image_generation: 'disabled',
-    response_format: 'b64_json',
-    watermark: true
-  };
 
   console.log('[Jimeng Image Service] Request body:', safeJsonStringify(requestBody));
 
@@ -205,44 +329,47 @@ const generateImageWithJimeng = async (
     const data = await response.json();
     console.log('[Jimeng Image Service] Response data:', JSON.stringify(data, null, 2));
 
-    // 解析响应 - 即梦 API 返回格式
-    if (data.data && Array.isArray(data.data) && data.data.length > 0) {
-      const imageData = data.data[0];
-      
-      // 格式 1: url (response_format: 'url')
-      if (imageData.url) {
-        console.log('[Jimeng Image Service] Found URL:', imageData.url);
-        return ensureDataUrl(imageData.url, 'image/png');
-      }
-      
-      // 格式 2: b64_json
-      if (imageData.b64_json) {
-        console.log('[Jimeng Image Service] Found b64_json');
-        return ensureDataUrl(imageData.b64_json, 'image/png');
-      }
-
-      // 容错：部分实现可能直接返回 base64 字段
-      for (const key of ['image', 'base64', 'b64', 'data'] as const) {
-        const value = (imageData as any)[key];
-        if (typeof value === 'string' && value.trim()) {
-          console.log('[Jimeng Image Service] Found image string field:', key);
-          return ensureDataUrl(value.trim(), 'image/png');
-        }
-      }
-    }
-
-    // 兜底：服务端可能直接返回字符串
-    if (typeof data === 'string' && data.trim()) {
-      console.log('[Jimeng Image Service] Found string response');
-      return ensureDataUrl(data.trim(), 'image/png');
+    const imageUrl = extractJimengImageFromResponse(data);
+    if (imageUrl) {
+      return imageUrl;
     }
 
     console.error('[Jimeng Image Service] No image data found in response');
     throw new Error('No image data in response');
   } catch (error) {
-    console.error('[Jimeng Image Service] Generation failed:', error);
+    console.error(`[Jimeng Image Service] ${action} failed:`, error);
     throw error;
   }
+};
+
+/**
+ * 即梦 (Doubao Seedream) 图片生成 API
+ * API 端点: http://ai-api.jdcloud.com/v1/imageEdit/generations
+ */
+const generateImageWithJimeng = async (
+  prompt: string,
+  inputImage?: ImageInput,
+  model: string = 'doubao-seedream-4-0-250828'
+): Promise<string> => {
+  console.log('[Jimeng Image Service] Generating image:', { model, prompt: prompt.slice(0, 50) });
+
+  const buildJimengImagePayload = (): Record<string, unknown> => {
+    const inputs = toImageInputList(inputImage).map(normalizeSeedreamImageValue).filter(Boolean);
+    if (!inputs.length) return {};
+    return { image: inputs.length === 1 ? inputs[0] : inputs };
+  };
+
+  const requestBody: Record<string, unknown> = {
+    model,
+    prompt,
+    ...buildJimengImagePayload(),
+    size: '2K',
+    sequential_image_generation: 'disabled',
+    response_format: 'b64_json',
+    watermark: true
+  };
+
+  return requestJimengImage(requestBody, 'generate');
 };
 
 /**
@@ -259,39 +386,10 @@ const generateImageWithGeminiFlash = async (
 
   console.log('[Gemini Image Service] Generating image:', { model, hasInputImage: !!inputImage, apiUrl });
 
-  const parts: any[] = [];
-
+  const parts: GeminiPart[] = [];
   for (const imageValue of toImageInputList(inputImage)) {
-    const trimmed = (imageValue || '').trim();
-    if (!trimmed) continue;
-
-    if (isHttpUrl(trimmed)) {
-      parts.push(
-        isJdcloud
-          ? {
-              file_data: {
-                mime_type: 'image/png',
-                file_uri: trimmed
-              }
-            }
-          : {
-              fileData: {
-                mimeType: 'image/png',
-                fileUri: trimmed
-              }
-            }
-      );
-      continue;
-    }
-
-    const normalized = normalizeSeedreamImageValue(trimmed);
-    const base64Data = extractBase64Data(normalized);
-    const mimeType = extractMimeType(normalized);
-    const inline = {
-      ...(isJdcloud ? { mime_type: mimeType } : { mimeType }),
-      data: base64Data
-    };
-    parts.push(isJdcloud ? { inline_data: inline } : { inlineData: inline });
+    const part = buildGeminiImagePart(imageValue, isJdcloud);
+    if (part) parts.push(part);
   }
 
   if (prompt) {
@@ -329,66 +427,11 @@ const generateImageWithGeminiFlash = async (
     const data = await response.json();
     console.log('[Gemini Image Service] Response data keys:', Object.keys(data));
 
-    // JDCloud gateway often returns OpenAI-style `data: [{ url | b64_json }]`
-    if (data?.data && Array.isArray(data.data) && data.data.length > 0) {
-      const first = data.data[0] || {};
-      if (typeof first.b64_json === 'string' && first.b64_json) {
-        console.log('[Gemini Image Service] Found b64_json in data[0]');
-        return ensureDataUrl(first.b64_json, 'image/png');
-      }
-      if (typeof first.url === 'string' && first.url) {
-        console.log('[Gemini Image Service] Found url in data[0]');
-        return ensureDataUrl(first.url, 'image/png');
-      }
+    const imageUrl = extractImageFromGeminiResponse(data);
+    if (imageUrl) {
+      console.log('[Gemini Image Service] Extracted image URL length:', imageUrl.length);
+      return imageUrl;
     }
-
-    // 解析响应，提取生成的图片
-    if (data.candidates && data.candidates[0]) {
-      const responseParts = data.candidates[0].content?.parts || [];
-      console.log('[Gemini Image Service] Found', responseParts.length, 'parts in response');
-      
-      for (let i = 0; i < responseParts.length; i++) {
-        const part = responseParts[i];
-        console.log(`[Gemini Image Service] Part ${i} keys:`, Object.keys(part));
-        
-        // inline_data 格式（下划线命名）
-        if (part.inline_data && part.inline_data.data) {
-          const mimeType = part.inline_data.mime_type || part.inline_data.mimeType || 'image/png';
-          console.log('[Gemini Image Service] Found image in part.inline_data, mimeType:', mimeType);
-          const dataUrl = ensureDataUrl(part.inline_data.data, mimeType);
-          console.log('[Gemini Image Service] Generated data URL length:', dataUrl.length);
-          return dataUrl;
-        }
-        
-        // inlineData 格式（驼峰命名）
-        if (part.inlineData && part.inlineData.data) {
-          const mimeType = part.inlineData.mime_type || part.inlineData.mimeType || 'image/png';
-          console.log('[Gemini Image Service] Found image in part.inlineData, mimeType:', mimeType);
-          const dataUrl = ensureDataUrl(part.inlineData.data, mimeType);
-          console.log('[Gemini Image Service] Generated data URL length:', dataUrl.length);
-          return dataUrl;
-        }
-      }
-    }
-
-    // 其他格式
-    if (data.result?.image) {
-      console.log('[Gemini Image Service] Found image in result.image');
-      return ensureDataUrl(data.result.image);
-    }
-    if (data.image) {
-      console.log('[Gemini Image Service] Found image in data.image');
-      return ensureDataUrl(data.image);
-    }
-    if (data.url) {
-      console.log('[Gemini Image Service] Found image URL in data.url');
-      return ensureDataUrl(data.url);
-    }
-    if (typeof data === 'string') {
-      console.log('[Gemini Image Service] Found base64 string in response');
-      return ensureDataUrl(data);
-    }
-
     console.error('[Gemini Image Service] No image data found in response structure');
     throw new Error('No image data in response');
   } catch (error) {
@@ -455,28 +498,21 @@ export const editImageWithGeminiFlash = async (
   originalImage: string,
   maskImage: string,
   prompt: string,
+  referenceImage?: string,
   model: string = 'Gemini-2.5-flash-image-preview'
 ): Promise<string> => {
   const apiUrl = getApiUrl();
   const apiKey = getApiKey();
   const isJdcloud = apiUrl.startsWith('/jdcloud') || apiUrl.includes('jdcloud.com');
 
-  const parts: any[] = [];
-  if (originalImage) {
-    parts.push({
-      inline_data: {
-        ...(isJdcloud ? { mime_type: extractMimeType(originalImage) } : { mimeType: extractMimeType(originalImage) }),
-        data: extractBase64Data(originalImage)
-      }
-    });
-  }
-  if (maskImage) {
-    parts.push({
-      inline_data: {
-        ...(isJdcloud ? { mime_type: extractMimeType(maskImage) } : { mimeType: extractMimeType(maskImage) }),
-        data: extractBase64Data(maskImage)
-      }
-    });
+  const parts: GeminiPart[] = [];
+  const originalPart = buildGeminiImagePart(originalImage, isJdcloud);
+  if (originalPart) parts.push(originalPart);
+  const maskPart = buildGeminiImagePart(maskImage, isJdcloud);
+  if (maskPart) parts.push(maskPart);
+  if (referenceImage) {
+    const referencePart = buildGeminiImagePart(referenceImage, isJdcloud);
+    if (referencePart) parts.push(referencePart);
   }
   if (prompt) {
     parts.push({ text: prompt });
@@ -508,28 +544,67 @@ export const editImageWithGeminiFlash = async (
 
     const data = await response.json();
 
-    if (data?.data && Array.isArray(data.data) && data.data.length > 0) {
-      const first = data.data[0] || {};
-      if (typeof first.b64_json === 'string' && first.b64_json) return ensureDataUrl(first.b64_json, 'image/png');
-      if (typeof first.url === 'string' && first.url) return ensureDataUrl(first.url, 'image/png');
+    const imageUrl = extractImageFromGeminiResponse(data);
+    if (imageUrl) {
+      return imageUrl;
     }
-
-    const partsResp = data.candidates?.[0]?.content?.parts || [];
-    for (const part of partsResp) {
-      if (part.inline_data?.data) {
-        return ensureDataUrl(part.inline_data.data, part.inline_data.mime_type || part.inline_data.mimeType);
-      }
-      if (part.inlineData?.data) {
-        return ensureDataUrl(part.inlineData.data, part.inlineData.mime_type || part.inlineData.mimeType);
-      }
-    }
-    if (data.result?.image) return ensureDataUrl(data.result.image);
-    if (data.image) return ensureDataUrl(data.image);
-    if (data.url) return ensureDataUrl(data.url);
-    if (typeof data === 'string') return ensureDataUrl(data);
     throw new Error('No image data in edit response');
   } catch (error) {
     console.error('[Gemini Image Service] Edit failed:', error);
     throw error;
   }
+};
+
+interface SeedreamEditOptions {
+  originalImage: string;
+  prompt: string;
+  maskImage?: string;
+  referenceImage?: string;
+  referenceMask?: string;
+  model?: string;
+  mode?: 'inpaint' | 'remix';
+}
+
+export const editImageWithSeedream = async ({
+  originalImage,
+  prompt,
+  maskImage,
+  referenceImage,
+  referenceMask,
+  model = 'doubao-seedream-4-0-250828',
+  mode
+}: SeedreamEditOptions): Promise<string> => {
+  const payload: Record<string, unknown> = {
+    model,
+    prompt,
+    image: normalizeSeedreamImageValue(originalImage),
+    size: '2K',
+    sequential_image_generation: 'disabled',
+    response_format: 'b64_json',
+    watermark: true
+  };
+
+  if (maskImage) {
+    const normalizedMask = normalizeSeedreamImageValue(maskImage);
+    payload.mask = normalizedMask;
+    payload.mask_image = normalizedMask;
+    payload.maskImage = normalizedMask;
+  }
+
+  if (referenceImage) {
+    payload.reference_image = normalizeSeedreamImageValue(referenceImage);
+  }
+
+  if (referenceMask) {
+    const normalizedRefMask = normalizeSeedreamImageValue(referenceMask);
+    payload.reference_mask = normalizedRefMask;
+    payload.referenceMask = normalizedRefMask;
+  }
+
+  if (mode) {
+    payload.mode = mode;
+    payload.operation = mode;
+  }
+
+  return requestJimengImage(payload, 'edit');
 };

@@ -41,6 +41,20 @@ const isValidPreset = (value: unknown): value is PromptMarkPreset => {
   );
 };
 
+const ensureUniqueIds = (presets: PromptMarkPreset[]): PromptMarkPreset[] => {
+  const seenCounts = new Map<string, number>();
+  return presets.map((preset, index) => {
+    const rawId = preset.id;
+    const count = seenCounts.get(rawId) ?? 0;
+    seenCounts.set(rawId, count + 1);
+    if (count === 0) return preset;
+    return {
+      ...preset,
+      id: `${rawId}-${count}`,
+    };
+  });
+};
+
 export const getPromptMarks = async (): Promise<PromptMarkPreset[]> => {
   if (cachedPresets) return cachedPresets;
   if (inFlight) return inFlight;
@@ -52,7 +66,8 @@ export const getPromptMarks = async (): Promise<PromptMarkPreset[]> => {
       const json: unknown = await response.json();
       if (!Array.isArray(json)) return FALLBACK_PROMPTMARKS;
       const presets = json.filter(isValidPreset);
-      return presets.length ? presets : FALLBACK_PROMPTMARKS;
+      const uniquePresets = ensureUniqueIds(presets);
+      return uniquePresets.length ? uniquePresets : FALLBACK_PROMPTMARKS;
     } catch {
       return FALLBACK_PROMPTMARKS;
     }

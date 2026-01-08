@@ -39,6 +39,12 @@ const Node: React.FC<NodeProps> = ({
   const nodeStartPos = useRef({ x: 0, y: 0 }); // Node start pos
   const nodeStartDim = useRef({ w: 0, h: 0 }); // Node start dimensions
 
+  const getDefaultWidth = () => {
+    if (node.type === NodeType.PROMPTMARK) return 760;
+    if (node.type === NodeType.TEXT_RESULT_OUTPUT) return 500;
+    return 320;
+  };
+
   // ---------------- Drag Logic ----------------
   const handleMouseDown = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('input, textarea, button, .node-handle, .resize-handle')) return;
@@ -56,7 +62,7 @@ const Node: React.FC<NodeProps> = ({
       e.stopPropagation();
       setIsResizing(true);
       dragStartPos.current = { x: e.clientX, y: e.clientY };
-      const defaultWidth = node.type === NodeType.TEXT_RESULT_OUTPUT ? 500 : 320;
+      const defaultWidth = getDefaultWidth();
       nodeStartDim.current = { 
           w: node.dimensions?.width || defaultWidth, 
           h: node.dimensions?.height || 'auto' as any // simplified
@@ -108,13 +114,10 @@ const Node: React.FC<NodeProps> = ({
   const showOutput = true; // All nodes can potentially output to trigger next steps
 
   // Different default widths for different node types
-  const getDefaultWidth = () => {
-    if (node.type === NodeType.TEXT_RESULT_OUTPUT) return 500;
-    return 320;
-  };
-
   const width = node.dimensions?.width || getDefaultWidth();
   const height = node.dimensions?.height;
+  const minWidthValue = node.type === NodeType.PROMPTMARK ? 640 : MIN_WIDTH;
+  const minHeightValue = node.type === NodeType.PROMPTMARK ? 520 : 'fit-content';
   const borderColor = node.lineageColor || (isSelected ? '#a855f7' : '#334155');
   const shadowColor = node.lineageColor 
     ? `${node.lineageColor}55` 
@@ -145,10 +148,10 @@ const Node: React.FC<NodeProps> = ({
       style={{ 
         left: node.position.x, 
         top: node.position.y,
-        minWidth: MIN_WIDTH,
+        minWidth: minWidthValue,
         width: width,
         height: height,
-        minHeight: 'fit-content',
+        minHeight: minHeightValue,
         cursor: isDragging ? 'grabbing' : 'grab',
         borderColor: isSelected ? '#3b82f6' : '#d1d5db', // Light gray border when not selected
         boxShadow: isSelected ? '0 0 0 2px rgba(59, 130, 246, 0.5), 0 20px 40px -12px rgba(0,0,0,0.4)' : '0 20px 40px -12px rgba(0,0,0,0.2)',

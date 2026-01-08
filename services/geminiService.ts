@@ -1,4 +1,5 @@
 import { GeneratedImage } from "../types";
+import { randomId } from "../utils/id";
 
 // Helper to convert Blob/File to Base64 (Keep this as it's used by UI)
 export const fileToBase64 = (file: File | Blob): Promise<string> => {
@@ -53,7 +54,7 @@ export const generateImagesFromWorkflow = async (
   await new Promise(resolve => setTimeout(resolve, 600));
 
   return models.map((modelConfig, index) => ({
-    id: crypto.randomUUID(),
+    id: randomId(),
     url: buildMockImage(prompt, modelConfig.id, index, inputImage ? 'source attached' : 'no source'),
     prompt,
     model: modelConfig.id
@@ -77,7 +78,8 @@ export const editImage = async (
     originalImage: string,
     maskImage: string,
     prompt: string,
-    referenceImage?: string
+    referenceImage?: string,
+    _modelId?: string
 ): Promise<string | null> => {
     console.log("[Mock Service] Editing image (mock):", { prompt, hasRef: !!referenceImage });
 

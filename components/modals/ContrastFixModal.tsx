@@ -8,7 +8,7 @@ interface ContrastFixModalProps {
   isOpen: boolean;
   onClose: () => void;
   originalImageUrl: string;
-  onConfirm: (mask: string, instruction: string, refImage: string) => void;
+  onConfirm: (mask: string, instruction: string, refImage: string, refMask: string) => void;
   anchorRect: { left: number; top: number; width: number; height: number };
 }
 
@@ -79,7 +79,7 @@ const ContrastFixModal: React.FC<ContrastFixModalProps> = ({ isOpen, onClose, or
 
   const handleApply = async () => {
     if (!maskA || !maskB || !instruction || !refImage) return;
-    onConfirm(maskA, instruction, refImage);
+    onConfirm(maskA, instruction, refImage, maskB);
   };
 
   if (!isOpen) return null;

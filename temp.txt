@@ -13,8 +13,7 @@ interface ResultNodeProps {
     instructions: string[],
     type: 'fix' | 'precise' | 'contrast',
     mask?: string,
-    refImage?: string,
-    refMask?: string
+    refImage?: string
   ) => void;
 }
 
@@ -45,9 +44,9 @@ const ResultNode: React.FC<ResultNodeProps> = ({ data, updateData, onSpawnNextNo
     setActiveModal(null);
   };
 
-  const handleContrastConfirm = (mask: string, instruction: string, refImage: string, refMask: string) => {
+  const handleContrastConfirm = (mask: string, instruction: string, refImage: string) => {
     if (!selectedImage) return;
-    onSpawnNextNode(selectedImage, [instruction], 'contrast', mask, refImage, refMask);
+    onSpawnNextNode(selectedImage, [instruction], 'contrast', mask, refImage);
     setActiveModal(null);
   };
 
@@ -86,7 +85,7 @@ const ResultNode: React.FC<ResultNodeProps> = ({ data, updateData, onSpawnNextNo
   if (data.status === 'error') {
     return (
       <div className="flex items-center justify-center h-full text-red-400 italic min-h-[150px]">
-        生成失败，请重试。
+        生成失败，请重试�?
       </div>
     );
   }
@@ -167,7 +166,7 @@ const ResultNode: React.FC<ResultNodeProps> = ({ data, updateData, onSpawnNextNo
             <button
               onClick={(e) => openModal(e, 'fixModel')}
               className="flex flex-col items-center justify-center p-3 bg-black/20 hover:bg-black/40 rounded-xl gap-2 transition group"
-              title="固定 Prompt 并优化"
+              title="固定 Prompt 并优�?
             >
               <div className="p-2 rounded-full bg-purple-500/20 text-purple-400 group-hover:bg-purple-500 group-hover:text-white transition-colors">
                 <Wand2 size={14} />
@@ -177,7 +176,7 @@ const ResultNode: React.FC<ResultNodeProps> = ({ data, updateData, onSpawnNextNo
             <button
               onClick={(e) => openModal(e, 'precise')}
               className="flex flex-col items-center justify-center p-3 bg-black/20 hover:bg-black/40 rounded-xl gap-2 transition group"
-              title="局部重绘 (Inpainting)"
+              title="局部重�?(Inpainting)"
             >
               <div className="p-2 rounded-full bg-blue-500/20 text-blue-400 group-hover:bg-blue-500 group-hover:text-white transition-colors">
                 <Edit2 size={14} />
@@ -186,7 +185,7 @@ const ResultNode: React.FC<ResultNodeProps> = ({ data, updateData, onSpawnNextNo
             </button>
             <button
               onClick={(e) => openModal(e, 'contrast')}
-              className="flex flex-col items-center justify-center p-3 bg-black/20 hover:bg黑/40 rounded-xl gap-2 transition group"
+              className="flex flex-col items-center justify-center p-3 bg-black/20 hover:bg�?40 rounded-xl gap-2 transition group"
               title="参考图迁移"
             >
               <div className="p-2 rounded-full bg-green-500/20 text-green-400 group-hover:bg-green-500 group-hover:text-white transition-colors">

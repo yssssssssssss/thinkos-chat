@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 type UseVisibilityOptions = {
   rootMargin?: string;
@@ -12,12 +12,20 @@ type UseVisibilityOptions = {
  */
 export function useVisibility(options?: UseVisibilityOptions) {
   const targetRef = useRef<HTMLElement | null>(null);
-  const [isVisible, setIsVisible] = useState(false);
+  const supportsObserver = useMemo(
+    () => typeof window !== 'undefined' && typeof (window as any).IntersectionObserver !== 'undefined',
+    []
+  );
+  const [isVisible, setIsVisible] = useState(() => !supportsObserver);
   const retainTimer = useRef<number | null>(null);
 
   useEffect(() => {
+    if (!supportsObserver) {
+      setIsVisible(true);
+      return;
+    }
     const node = targetRef.current;
-    if (!node || typeof IntersectionObserver === 'undefined') return;
+    if (!node) return;
 
     const observer = new IntersectionObserver(
       ([entry]) => {
@@ -48,7 +56,7 @@ export function useVisibility(options?: UseVisibilityOptions) {
         retainTimer.current = null;
       }
     };
-  }, [options?.rootMargin, options?.retainOnExitMs]);
+  }, [options?.rootMargin, options?.retainOnExitMs, supportsObserver]);
 
-  return { targetRef, isVisible };
+  return { targetRef, isVisible, supportsObserver };
 }

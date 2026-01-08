@@ -34,16 +34,18 @@ import { NodeData, Connection, NodeType, ResultNodeData, TextResultNodeData, Ima
 
 import { generateImagesFromWorkflow as generateImagesMock, editImage } from './services/geminiService';
 
-import { generateImagesFromWorkflow as generateImagesReal, editImageWithGeminiFlash } from './services/geminiImageService';
+import { generateImagesFromWorkflow as generateImagesReal, editImageWithGeminiFlash, editImageWithSeedream } from './services/geminiImageService';
 
 import { chatCompletionsStream } from './services/textModelService';
 import { resolveSystemPromptText } from './services/systemPromptService';
 import { deleteNodeImages } from './utils/imageStorage';
+import { randomId } from './utils/id';
 
 
 
 // Toggle between real API and mock data (true = real Gemini endpoint)
 const USE_REAL_IMAGE_API = true;
+const SEEDREAM_MODEL_ID = 'doubao-seedream-4-0-250828';
 
 import { Plus, ZoomIn, ZoomOut, Maximize } from 'lucide-react';
 
@@ -120,7 +122,7 @@ const Canvas: React.FC = () => {
 
     const log: LogEntry = {
 
-      id: crypto.randomUUID(),
+      id: randomId(),
 
       timestamp: new Date(),
 
@@ -219,16 +221,35 @@ const Canvas: React.FC = () => {
 
     const onWheel = (e: WheelEvent) => {
       const target = e.target as Element | null;
-      if (target?.closest?.('[data-node-id]')) return;
       if (target?.closest?.('[data-stop-canvas-zoom]')) return;
+
+      const shouldHandleZoom = e.ctrlKey;
+
+      if (!shouldHandleZoom) return;
+
       e.preventDefault();
+      e.stopPropagation();
+
+      const rect = element.getBoundingClientRect();
+      const pointerX = e.clientX - rect.left;
+      const pointerY = e.clientY - rect.top;
+      const worldX = (pointerX - offset.x) / scale;
+      const worldY = (pointerY - offset.y) / scale;
+
       const delta = e.deltaY > 0 ? -0.1 : 0.1;
-      setScale((prev) => Math.min(Math.max(0.2, prev + delta), 2.5));
+      const nextScale = Math.min(Math.max(0.2, scale + delta), 2.5);
+      if (nextScale === scale) return;
+
+      setScale(nextScale);
+      setOffset({
+        x: pointerX - worldX * nextScale,
+        y: pointerY - worldY * nextScale,
+      });
     };
 
     element.addEventListener('wheel', onWheel, { passive: false });
     return () => element.removeEventListener('wheel', onWheel);
-  }, []);
+  }, [scale, offset]);
 
 
 
@@ -355,7 +376,7 @@ const Canvas: React.FC = () => {
 
         const targetNode = nodes.find(n => n.id === targetId);
 
-        setConnections(prev => [...prev, { id: crypto.randomUUID(), sourceId, targetId }]);
+        setConnections(prev => [...prev, { id: randomId(), sourceId, targetId }]);
 
         addLog('info', `Connection created: ${sourceNode?.type} ?${targetNode?.type}`, undefined, 'Connection', { sourceId, targetId });
 
@@ -369,7 +390,7 @@ const Canvas: React.FC = () => {
 
   const addNode = (type: NodeType, spawnPosition?: { x: number; y: number }) => {
 
-      const id = crypto.randomUUID();
+      const id = randomId();
 
       // Add new node in center of view (corrected for scale)
 
@@ -427,7 +448,7 @@ const Canvas: React.FC = () => {
       const app = APP_LIBRARY.find(p => p.id === appId);
       if (!app) return;
 
-      const id = crypto.randomUUID();
+      const id = randomId();
       const centerX = (window.innerWidth / 2 - offset.x) / scale;
       const centerY = (window.innerHeight / 2 - offset.y) / scale;
       const pos = { x: centerX - 160, y: centerY - 100 };
@@ -570,7 +591,7 @@ const Canvas: React.FC = () => {
               }
 
               const newImage: GeneratedImage = {
-                  id: crypto.randomUUID(),
+                  id: randomId(),
                   url: payload.image,
                   prompt: promptLabel,
                   model: 'Glass Mosaic Studio',
@@ -813,7 +834,7 @@ const Canvas: React.FC = () => {
                     generated.forEach((img, modelIdx) => {
                         const lineageColor = getLineageColor();
                         const enrichedImage: GeneratedImage = { ...img, url: normalizeImageDataUrl(img.url), lineageColor };
-                        const resultNodeId = crypto.randomUUID();
+                        const resultNodeId = randomId();
 
                         addLog('success', `Image generated successfully by ${img.model}`, resultNodeId, 'RESULT_OUTPUT');
 
@@ -833,7 +854,7 @@ const Canvas: React.FC = () => {
                         });
 
                         newConnections.push({
-                            id: crypto.randomUUID(),
+                            id: randomId(),
                             sourceId: modelNodeId,
                             targetId: resultNodeId,
                             color: lineageColor
@@ -988,7 +1009,7 @@ const Canvas: React.FC = () => {
           generated.forEach((img, modelIdx) => {
               const lineageColor = getLineageColor();
               const enrichedImage: GeneratedImage = { ...img, url: normalizeImageDataUrl(img.url), lineageColor };
-              const resultNodeId = crypto.randomUUID();
+              const resultNodeId = randomId();
 
               newResultNodes.push({
                   id: resultNodeId,
@@ -1002,7 +1023,7 @@ const Canvas: React.FC = () => {
               });
 
               newConnections.push({
-                  id: crypto.randomUUID(),
+                  id: randomId(),
                   sourceId: modelNodeId,
                   targetId: resultNodeId,
                   color: lineageColor
@@ -1042,7 +1063,9 @@ const Canvas: React.FC = () => {
 
       mask?: string,
 
-      refImage?: string
+      refImage?: string,
+
+      refMask?: string
 
   ) => {
 
@@ -1068,7 +1091,7 @@ const Canvas: React.FC = () => {
 
         // Create new Node ID and Position
 
-        const newNodeId = crypto.randomUUID();
+        const newNodeId = randomId();
 
         const newPos = { 
 
@@ -1136,7 +1159,7 @@ const Canvas: React.FC = () => {
 
         // Color the lineage edge
 
-        setConnections(prev => [...prev, { id: crypto.randomUUID(), sourceId: sourceNode.id, targetId: newNodeId, color: lineageColor }]);
+        setConnections(prev => [...prev, { id: randomId(), sourceId: sourceNode.id, targetId: newNodeId, color: lineageColor }]);
 
 
 
@@ -1150,13 +1173,15 @@ const Canvas: React.FC = () => {
 
             if (type === 'fix') {
 
-                 // Fix Model - Loop through all provided prompts (could be multiple if selected from suggestions)
-
                  const generateImages = USE_REAL_IMAGE_API ? generateImagesReal : generateImagesMock;
+                 const inputImage = sourceImage.url ? normalizeImageDataUrl(sourceImage.url) : null;
+                 const prompts = instructions.length ? instructions : [sourceImage.prompt || ''];
+                 const safePrompts = prompts.filter((text) => typeof text === 'string' && text.trim().length);
+                 const promptsToUse = safePrompts.length ? safePrompts : prompts;
 
-                 for (const prompt of instructions) {
+                 for (const prompt of promptsToUse) {
 
-                     const imgs = await generateImages(prompt, [{ id: sourceImage.model }], null);
+                     const imgs = await generateImages(prompt, [{ id: sourceImage.model }], inputImage);
 
                      newImages.push(...imgs.map(img => ({
                         ...img,
@@ -1171,15 +1196,47 @@ const Canvas: React.FC = () => {
                 // Precise or Contrast - Edit existing image (Usually single instruction)
 
                 const prompt = instructions[0];
+                const normalizedSourceImage = normalizeImageDataUrl(sourceImage.url);
+                const normalizedMask = mask ? normalizeImageDataUrl(mask) : undefined;
+                const normalizedRefImage = refImage ? normalizeImageDataUrl(refImage) : undefined;
+                const normalizedRefMask = refMask ? normalizeImageDataUrl(refMask) : undefined;
 
-                const editFn = USE_REAL_IMAGE_API ? editImageWithGeminiFlash : editImage;
-                const resultUrl = await editFn(sourceImage.url, mask || '', prompt, refImage);
+                let resultUrl: string | null = null;
+
+                if (USE_REAL_IMAGE_API) {
+                    if (sourceImage.model === SEEDREAM_MODEL_ID) {
+                        resultUrl = await editImageWithSeedream({
+                            originalImage: normalizedSourceImage,
+                            prompt,
+                            maskImage: normalizedMask,
+                            referenceImage: normalizedRefImage,
+                            referenceMask: normalizedRefMask,
+                            mode: type === 'contrast' ? 'remix' : 'inpaint'
+                        });
+                    } else {
+                        resultUrl = await editImageWithGeminiFlash(
+                            normalizedSourceImage,
+                            normalizedMask || '',
+                            prompt,
+                            normalizedRefImage,
+                            sourceImage.model
+                        );
+                    }
+                } else {
+                    resultUrl = await editImage(
+                        normalizedSourceImage,
+                        normalizedMask || '',
+                        prompt,
+                        normalizedRefImage,
+                        sourceImage.model
+                    );
+                }
 
                 if (resultUrl) {
 
                     newImages = [{
 
-                         id: crypto.randomUUID(),
+                         id: randomId(),
 
                          url: normalizeImageDataUrl(resultUrl),
 
@@ -1229,7 +1286,7 @@ const Canvas: React.FC = () => {
 
                 restImages.forEach((img, idx) => {
 
-                    const extraId = crypto.randomUUID();
+                    const extraId = randomId();
 
                     const pos = { x: newPos.x, y: newPos.y + (idx + 1) * verticalSpacing };
 
@@ -1253,7 +1310,7 @@ const Canvas: React.FC = () => {
 
                     extraConnections.push({
 
-                        id: crypto.randomUUID(),
+                        id: randomId(),
 
                         sourceId: sourceNode.id,
 
