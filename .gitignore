@@ -22,3 +22,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Generated images
+output/*.png
+output/*.jpg
+output/*.jpeg
+output/*.webp

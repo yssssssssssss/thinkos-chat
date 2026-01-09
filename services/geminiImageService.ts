@@ -10,7 +10,10 @@ const toJdcloudProxyUrl = (url: string): string => {
   if (typeof window !== 'undefined' && (trimmed.startsWith('http://') || trimmed.startsWith('https://'))) {
     try {
       const u = new URL(trimmed);
-      if (u.hostname === 'ai-api.jdcloud.com') return `/jdcloud${u.pathname}${u.search}`;
+      // 支持多个 JDCloud 域名的代理
+      if (u.hostname === 'ai-api.jdcloud.com' || u.hostname === 'modelservice.jdcloud.com') {
+        return `/jdcloud${u.pathname}${u.search}`;
+      }
     } catch {
       // ignore
     }
@@ -21,27 +24,35 @@ const toJdcloudProxyUrl = (url: string): string => {
 
 // 从环境变量获取 API 配置
 const getApiUrl = (): string => {
-  if (typeof process !== 'undefined' && process.env?.GEMINI_IMAGE_API_URL) {
-    return toJdcloudProxyUrl(process.env.GEMINI_IMAGE_API_URL);
+  if (typeof process !== 'undefined' && process.env?.VITE_GEMINI_IMAGE_API_URL) {
+    return toJdcloudProxyUrl(process.env.VITE_GEMINI_IMAGE_API_URL);
   }
   // Use Vite dev-server proxy by default to avoid browser CORS.
   return '/jdcloud/v1/images/gemini_flash/generations';
 };
 
 const getJimengApiUrl = (): string => {
-  if (typeof process !== 'undefined' && process.env?.JIMENG_IMAGE_API_URL) {
-    return toJdcloudProxyUrl(process.env.JIMENG_IMAGE_API_URL);
+  if (typeof process !== 'undefined' && process.env?.VITE_JIMENG_IMAGE_API_URL) {
+    return toJdcloudProxyUrl(process.env.VITE_JIMENG_IMAGE_API_URL);
   }
   // Use Vite dev-server proxy by default to avoid browser CORS.
   return '/jdcloud/v1/imageEdit/generations';
 };
 
 const getApiKey = (): string => {
-  if (typeof process !== 'undefined' && process.env?.GEMINI_API_KEY) {
-    return process.env.GEMINI_API_KEY;
+  if (typeof process !== 'undefined' && process.env?.VITE_GEMINI_API_KEY) {
+    return process.env.VITE_GEMINI_API_KEY;
   }
   console.warn('[Gemini Image Service] Missing API key');
   return '';
+};
+
+const getJimengApiKey = (): string => {
+  if (typeof process !== 'undefined' && process.env?.VITE_JIMENG_API_KEY) {
+    return process.env.VITE_JIMENG_API_KEY;
+  }
+  // 如果没有单独的即梦 API Key，则使用 Gemini 的 Key
+  return getApiKey();
 };
 
 // 从 base64 data URL 中提取纯 base64 数据
@@ -64,13 +75,33 @@ const extractMimeType = (dataUrl: string): string => {
 
 // 确保 base64 数据有正确的 data URL 前缀
 const ensureDataUrl = (imageData: string, mimeType: string = 'image/png'): string => {
-  if (imageData.startsWith('data:')) {
-    return imageData;
+  const trimmed = (imageData || '').trim();
+  if (!trimmed) return '';
+  
+  // 已经是 data URL
+  if (trimmed.startsWith('data:')) {
+    return trimmed;
   }
-  if (imageData.startsWith('http://') || imageData.startsWith('https://')) {
-    return imageData;
+  
+  // HTTP URL
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    return trimmed;
   }
-  return `data:${mimeType};base64,${imageData}`;
+  
+  // 检测 base64 图像类型
+  let detectedMime = mimeType;
+  if (trimmed.startsWith('/9j/')) {
+    detectedMime = 'image/jpeg';
+  } else if (trimmed.startsWith('iVBORw0')) {
+    detectedMime = 'image/png';
+  } else if (trimmed.startsWith('R0lGOD')) {
+    detectedMime = 'image/gif';
+  } else if (trimmed.startsWith('UklGR')) {
+    detectedMime = 'image/webp';
+  }
+  
+  console.log('[ensureDataUrl] Converting base64 to data URL, detected mime:', detectedMime, 'length:', trimmed.length);
+  return `data:${detectedMime};base64,${trimmed}`;
 };
 
 const isHttpUrl = (value: string): boolean => value.startsWith('http://') || value.startsWith('https://');
@@ -185,26 +216,40 @@ const extractImageFromParts = (parts?: GeminiPart[] | GeminiPart): string | null
   if (!parts) return null;
   const list = Array.isArray(parts) ? parts : [parts];
 
-  for (const part of list) {
+  console.log('[Gemini Image Service] Extracting from parts, count:', list.length);
+
+  for (let i = 0; i < list.length; i++) {
+    const part = list[i];
     if (!part) continue;
+
+    console.log(`[Gemini Image Service] Part ${i} keys:`, Object.keys(part));
+    console.log(`[Gemini Image Service] Part ${i} content:`, safeJsonStringify(part));
 
     const inline = part.inline_data || part.inlineData;
     if (inline?.data) {
+      console.log('[Gemini Image Service] Found inline_data with data length:', inline.data.length);
       const mimeType = inline.mime_type || inline.mimeType || 'image/png';
       return ensureDataUrl(inline.data, mimeType);
     }
 
     const fileData = part.file_data || part.fileData;
     if (fileData) {
-      const uri = (fileData as any).file_uri || fileData.fileUri;
+      const uri = (fileData as any).file_uri || (fileData as any).fileUri;
       if (typeof uri === 'string' && uri.trim()) {
+        console.log('[Gemini Image Service] Found file_data URI');
         return ensureDataUrl(uri.trim());
       }
     }
 
     const fallbackUrl = (part as any).image_url || (part as any).imageUrl || (part as any).url;
     if (typeof fallbackUrl === 'string' && fallbackUrl.trim()) {
+      console.log('[Gemini Image Service] Found fallback URL');
       return ensureDataUrl(fallbackUrl.trim());
+    }
+    
+    // 检查是否有 text 字段（可能是文本响应而非图像）
+    if ((part as any).text) {
+      console.log('[Gemini Image Service] Part contains text:', (part as any).text.slice(0, 200));
     }
   }
 
@@ -225,24 +270,87 @@ const pickFirstImageField = (source: any, keys: string[]): string | null => {
 const extractImageFromGeminiResponse = (data: any): string | null => {
   if (!data) return null;
 
+  // 添加详细日志 - 打印完整响应结构（截断大数据）
+  console.log('[Gemini Image Service] Extracting image from response...');
+  console.log('[Gemini Image Service] Full response structure:', safeJsonStringify(data));
+
+  // 检查 JDCloud 特有的响应格式
+  if (data?.images && Array.isArray(data.images) && data.images.length > 0) {
+    const firstImage = data.images[0];
+    if (typeof firstImage === 'string') {
+      console.log('[Gemini Image Service] Found image in images array (string)');
+      return ensureDataUrl(firstImage);
+    }
+    if (firstImage?.b64_json || firstImage?.base64 || firstImage?.data) {
+      console.log('[Gemini Image Service] Found image in images array (object)');
+      return ensureDataUrl(firstImage.b64_json || firstImage.base64 || firstImage.data);
+    }
+  }
+
   if (Array.isArray(data?.data) && data.data.length > 0) {
     const first = data.data[0] || {};
     const fromData = pickFirstImageField(first, ['b64_json', 'image', 'image_base64', 'base64', 'b64', 'data', 'url']);
-    if (fromData) return fromData;
+    if (fromData) {
+      console.log('[Gemini Image Service] Found image in data array');
+      return fromData;
+    }
   }
 
   if (Array.isArray(data?.candidates)) {
+    console.log('[Gemini Image Service] Checking candidates:', data.candidates.length);
     for (const candidate of data.candidates) {
-      const extracted = extractImageFromParts(candidate?.content?.parts);
-      if (extracted) return extracted;
+      console.log('[Gemini Image Service] Candidate keys:', Object.keys(candidate || {}));
+      console.log('[Gemini Image Service] Candidate content:', safeJsonStringify(candidate?.content));
+      const parts = candidate?.content?.parts;
+      if (parts) {
+        console.log('[Gemini Image Service] Parts count:', Array.isArray(parts) ? parts.length : 1);
+        const extracted = extractImageFromParts(parts);
+        if (extracted) {
+          console.log('[Gemini Image Service] Found image in candidates');
+          return extracted;
+        }
+      }
+      
+      // 检查 candidate 直接包含图像数据的情况
+      const candidateImage = pickFirstImageField(candidate, ['image', 'b64_json', 'image_base64', 'base64']);
+      if (candidateImage) {
+        console.log('[Gemini Image Service] Found image directly in candidate');
+        return candidateImage;
+      }
+    }
+  }
+
+  // 检查 response 字段
+  if (data?.response) {
+    console.log('[Gemini Image Service] Checking response field');
+    const fromResponse = extractImageFromGeminiResponse(data.response);
+    if (fromResponse) return fromResponse;
+  }
+
+  // 检查 output 字段
+  if (data?.output) {
+    if (typeof data.output === 'string') {
+      console.log('[Gemini Image Service] Found string output');
+      return ensureDataUrl(data.output);
+    }
+    const fromOutput = pickFirstImageField(data.output, ['image', 'b64_json', 'image_base64', 'base64', 'url']);
+    if (fromOutput) {
+      console.log('[Gemini Image Service] Found image in output');
+      return fromOutput;
     }
   }
 
   const fromResult = pickFirstImageField(data?.result, ['image', 'b64_json', 'image_base64']);
-  if (fromResult) return fromResult;
+  if (fromResult) {
+    console.log('[Gemini Image Service] Found image in result');
+    return fromResult;
+  }
 
   const fromImageField = pickFirstImageField(data, ['image', 'image_base64', 'b64_json', 'url']);
-  if (fromImageField) return fromImageField;
+  if (fromImageField) {
+    console.log('[Gemini Image Service] Found image in root');
+    return fromImageField;
+  }
 
   if (Array.isArray(data?.predictions)) {
     for (const prediction of data.predictions) {
@@ -266,6 +374,7 @@ const extractImageFromGeminiResponse = (data: any): string | null => {
     return ensureDataUrl(data.trim());
   }
 
+  console.log('[Gemini Image Service] No image found in any known structure');
   return null;
 };
 
@@ -301,9 +410,33 @@ const extractJimengImageFromResponse = (data: any): string | null => {
   return null;
 };
 
+const parseApiError = (errorText: string): string => {
+  try {
+    const errorData = JSON.parse(errorText);
+    // 检查常见的错误结构
+    if (errorData?.error?.message) {
+      const code = errorData.error.code || '';
+      const message = errorData.error.message;
+      
+      // 敏感内容检测
+      if (code === 'InputTextSensitiveContentDetected' || message.includes('sensitive')) {
+        return '内容审核未通过：输入的提示词可能包含敏感内容（如版权角色、不当内容等），请修改后重试';
+      }
+      
+      return message;
+    }
+    if (errorData?.message) {
+      return errorData.message;
+    }
+    return errorText;
+  } catch {
+    return errorText;
+  }
+};
+
 const requestJimengImage = async (requestBody: Record<string, unknown>, action: string): Promise<string> => {
   const apiUrl = getJimengApiUrl();
-  const apiKey = getApiKey();
+  const apiKey = getJimengApiKey();
 
   console.log('[Jimeng Image Service] Request body:', safeJsonStringify(requestBody));
 
@@ -323,7 +456,8 @@ const requestJimengImage = async (requestBody: Record<string, unknown>, action: 
     if (!response.ok) {
       const errorText = await response.text();
       console.error('[Jimeng Image Service] Error response:', errorText);
-      throw new Error(`HTTP ${response.status}: ${errorText}`);
+      const friendlyError = parseApiError(errorText);
+      throw new Error(friendlyError);
     }
 
     const data = await response.json();
@@ -344,7 +478,7 @@ const requestJimengImage = async (requestBody: Record<string, unknown>, action: 
 
 /**
  * 即梦 (Doubao Seedream) 图片生成 API
- * API 端点: http://ai-api.jdcloud.com/v1/imageEdit/generations
+ * API 端点: https://modelservice.jdcloud.com/v1/imageEdit/generations
  */
 const generateImageWithJimeng = async (
   prompt: string,
@@ -421,7 +555,8 @@ const generateImageWithGeminiFlash = async (
     if (!response.ok) {
       const errorText = await response.text();
       console.error('[Gemini Image Service] Error response:', errorText);
-      throw new Error(`HTTP ${response.status}: ${errorText}`);
+      const friendlyError = parseApiError(errorText);
+      throw new Error(friendlyError);
     }
 
     const data = await response.json();

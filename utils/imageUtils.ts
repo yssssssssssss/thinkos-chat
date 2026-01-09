@@ -170,3 +170,49 @@ export const formatFileSize = (bytes: number): string => {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
+
+
+/**
+ * 生成带时间戳的文件名
+ */
+export const generateImageFileName = (modelName: string, prompt?: string): string => {
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const sanitizedModel = modelName.replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '_');
+  const promptPart = prompt ? `_${prompt.slice(0, 20).replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '_')}` : '';
+  return `${timestamp}_${sanitizedModel}${promptPart}.png`;
+};
+
+/**
+ * 下载图片到本地
+ * @param imageUrl - 图片 URL 或 Base64 data URL
+ * @param fileName - 文件名
+ */
+export const downloadImage = (imageUrl: string, fileName: string): void => {
+  const link = document.createElement('a');
+  link.href = imageUrl;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
+
+/**
+ * 批量保存图片
+ * @param images - 图片数组，包含 url、modelName 和可选的 prompt
+ * @param autoDownload - 是否自动下载，默认 true
+ */
+export const saveGeneratedImages = (
+  images: Array<{ url: string; modelName: string; prompt?: string }>,
+  autoDownload: boolean = true
+): void => {
+  if (!autoDownload) return;
+  
+  images.forEach((image, index) => {
+    // 延迟下载，避免浏览器阻止多个下载
+    setTimeout(() => {
+      const fileName = generateImageFileName(image.modelName, image.prompt);
+      downloadImage(image.url, fileName);
+      console.log(`[ImageUtils] Saved image: ${fileName}`);
+    }, index * 500);
+  });
+};

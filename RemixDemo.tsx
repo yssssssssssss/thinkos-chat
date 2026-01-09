@@ -7,7 +7,7 @@ const RemixDemo: React.FC = () => {
 
     // 请替换为您的实际配置
     const API_CONFIG = {
-        url: 'http://ai-api.jdcloud.com/v1/images/gemini_flash/generations',
+        url: 'https://modelservice.jdcloud.com/v1/images/gemini_flash/generations',
         key: 'YOUR_API_KEY_HERE'
     };
 

@@ -23,6 +23,7 @@ interface InputAreaProps {
   onFileUpload: (file: File) => void;
   onUrlUpload: (url: string) => void;
   onToolClick: (toolId: string) => void;
+  onClosePanel?: () => void; // 新增：关闭面板回调
   children?: React.ReactNode; // 用于渲染工具面板
 }
 
@@ -42,6 +43,7 @@ export const InputArea: React.FC<InputAreaProps> = ({
   onFileUpload,
   onUrlUpload,
   onToolClick,
+  onClosePanel,
   children,
 }) => {
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -59,6 +61,13 @@ export const InputArea: React.FC<InputAreaProps> = ({
   const handleUrlClick = () => {
     const url = prompt('输入图片 URL:');
     if (url) onUrlUpload(url);
+  };
+
+  // 点击输入框时关闭面板
+  const handleInputFocus = () => {
+    if (onClosePanel) {
+      onClosePanel();
+    }
   };
 
   return (
@@ -95,6 +104,7 @@ export const InputArea: React.FC<InputAreaProps> = ({
             <textarea 
               value={inputText} 
               onChange={(e) => onInputChange(e.target.value)}
+              onFocus={handleInputFocus}
               placeholder='发消息或输入 "/" 选择技能'
               className="w-full bg-transparent resize-none outline-none text-gray-700 placeholder-gray-400 text-[15px] min-h-[24px] max-h-32"
               rows={1}
@@ -123,18 +133,24 @@ export const InputArea: React.FC<InputAreaProps> = ({
               <div className="w-px h-5 bg-gray-200 mx-1" />
               
               {/* 工具按钮 */}
-              {toolButtons.map((tool) => (
-                <button key={tool.id} onClick={() => onToolClick(tool.id)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm transition-all hover:bg-gray-100 ${
+              {toolButtons.map((tool: ToolButton) => (
+                <button 
+                  key={tool.id} 
+                  onClick={() => onToolClick(tool.id)}
+                  className={`relative group p-2 rounded-xl transition-all hover:bg-gray-100 ${
                     (tool.id === 'text-chat' && activeMode === 'text') ||
                     (tool.id === 'image-gen' && activeMode === 'image') ||
                     (tool.id === 'prompt-market' && activePanel === 'promptMarket') ||
                     (tool.id === 'system-prompt' && activePanel === 'systemPrompt') ||
                     (tool.id === 'glass-mosaic' && activePanel === 'glassMosaic')
-                      ? 'bg-gray-100 text-gray-700' : 'text-gray-500'
-                  }`}>
-                  <tool.icon className={`w-4 h-4 ${tool.color}`} />
-                  <span className="hidden sm:inline">{tool.label}</span>
+                      ? 'bg-gray-100' : ''
+                  }`}
+                >
+                  <tool.icon className={`w-5 h-5 ${tool.color}`} />
+                  {/* Tooltip */}
+                  <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                    {tool.label}
+                  </span>
                 </button>
               ))}
             </div>

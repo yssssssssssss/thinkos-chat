@@ -1,6 +1,7 @@
 /**
  * 对话管理服务
- * 实现对话的 CRUD 操作和 localStorage 持久化
+ * 实现对话的 CRUD 操作和持久化存储
+ * 使用 IndexedDB 存储大数据（如图片），localStorage 作为备份
  */
 
 // ========== 类型定义 ==========
@@ -42,7 +43,141 @@ export interface Conversation {
 // ========== 常量 ==========
 
 const STORAGE_KEY = 'geminiflow_conversations';
+const DB_NAME = 'GeminiFlowConversations';
+const DB_VERSION = 1;
+const STORE_NAME = 'conversations';
 const MAX_CONVERSATIONS = 100;
+
+// ========== IndexedDB 操作 ==========
+
+let db: IDBDatabase | null = null;
+let dbInitPromise: Promise<IDBDatabase> | null = null;
+
+const initDB = (): Promise<IDBDatabase> => {
+  if (db) return Promise.resolve(db);
+  if (dbInitPromise) return dbInitPromise;
+
+  dbInitPromise = new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+    request.onerror = () => {
+      console.error('[ConversationService] Failed to open IndexedDB:', request.error);
+      dbInitPromise = null;
+      reject(request.error);
+    };
+
+    request.onsuccess = () => {
+      db = request.result;
+      console.log('[ConversationService] IndexedDB opened successfully');
+      resolve(db);
+    };
+
+    request.onupgradeneeded = (event) => {
+      const database = (event.target as IDBOpenDBRequest).result;
+      if (!database.objectStoreNames.contains(STORE_NAME)) {
+        database.createObjectStore(STORE_NAME, { keyPath: 'id' });
+        console.log('[ConversationService] IndexedDB store created');
+      }
+    };
+  });
+
+  return dbInitPromise;
+};
+
+// 从 IndexedDB 加载所有对话
+const loadFromIndexedDB = async (): Promise<Conversation[]> => {
+  try {
+    const database = await initDB();
+    return new Promise((resolve, reject) => {
+      const transaction = database.transaction([STORE_NAME], 'readonly');
+      const store = transaction.objectStore(STORE_NAME);
+      const request = store.getAll();
+
+      request.onsuccess = () => {
+        const conversations = (request.result || []) as Conversation[];
+        resolve(conversations.sort((a, b) => b.updatedAt - a.updatedAt));
+      };
+
+      request.onerror = () => {
+        console.error('[ConversationService] Failed to load from IndexedDB');
+        reject(request.error);
+      };
+    });
+  } catch (error) {
+    console.error('[ConversationService] IndexedDB load error:', error);
+    return [];
+  }
+};
+
+// 保存单个对话到 IndexedDB
+const saveToIndexedDB = async (conversation: Conversation): Promise<void> => {
+  try {
+    const database = await initDB();
+    return new Promise((resolve, reject) => {
+      const transaction = database.transaction([STORE_NAME], 'readwrite');
+      const store = transaction.objectStore(STORE_NAME);
+      const request = store.put(conversation);
+
+      request.onsuccess = () => {
+        resolve();
+      };
+
+      request.onerror = () => {
+        console.error('[ConversationService] Failed to save to IndexedDB');
+        reject(request.error);
+      };
+    });
+  } catch (error) {
+    console.error('[ConversationService] IndexedDB save error:', error);
+    throw error;
+  }
+};
+
+// 从 IndexedDB 删除对话
+const deleteFromIndexedDB = async (id: string): Promise<void> => {
+  try {
+    const database = await initDB();
+    return new Promise((resolve, reject) => {
+      const transaction = database.transaction([STORE_NAME], 'readwrite');
+      const store = transaction.objectStore(STORE_NAME);
+      const request = store.delete(id);
+
+      request.onsuccess = () => {
+        resolve();
+      };
+
+      request.onerror = () => {
+        reject(request.error);
+      };
+    });
+  } catch (error) {
+    console.error('[ConversationService] IndexedDB delete error:', error);
+    throw error;
+  }
+};
+
+// 清空 IndexedDB
+const clearIndexedDB = async (): Promise<void> => {
+  try {
+    const database = await initDB();
+    return new Promise((resolve, reject) => {
+      const transaction = database.transaction([STORE_NAME], 'readwrite');
+      const store = transaction.objectStore(STORE_NAME);
+      const request = store.clear();
+
+      request.onsuccess = () => {
+        resolve();
+      };
+
+      request.onerror = () => {
+        reject(request.error);
+      };
+    });
+  } catch (error) {
+    console.error('[ConversationService] IndexedDB clear error:', error);
+    throw error;
+  }
+};
 
 // ========== 辅助函数 ==========
 
@@ -76,62 +211,131 @@ const formatTime = (timestamp: number): string => {
   return `${date.getMonth() + 1}/${date.getDate()}`;
 };
 
-// ========== 存储操作 ==========
+// ========== localStorage 备份（用于小数据和迁移） ==========
 
-const loadFromStorage = (): Conversation[] => {
+const loadFromLocalStorage = (): Conversation[] => {
   try {
     const data = localStorage.getItem(STORAGE_KEY);
     if (!data) return [];
-    
-    const conversations = JSON.parse(data) as Conversation[];
-    // 按更新时间排序
-    return conversations.sort((a, b) => b.updatedAt - a.updatedAt);
+    return JSON.parse(data) as Conversation[];
   } catch (error) {
-    console.error('[ConversationService] Failed to load from storage:', error);
+    console.error('[ConversationService] Failed to load from localStorage:', error);
     return [];
   }
 };
 
-const saveToStorage = (conversations: Conversation[]): void => {
+const clearLocalStorage = (): void => {
   try {
-    // 限制最大数量
-    const limited = conversations.slice(0, MAX_CONVERSATIONS);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(limited));
+    localStorage.removeItem(STORAGE_KEY);
   } catch (error) {
-    console.error('[ConversationService] Failed to save to storage:', error);
+    console.error('[ConversationService] Failed to clear localStorage:', error);
   }
 };
 
 // ========== 缓存 ==========
 
 let cachedConversations: Conversation[] | null = null;
+let isInitialized = false;
 
-const getConversations = (): Conversation[] => {
+// 初始化：从 IndexedDB 加载，如果为空则从 localStorage 迁移
+const initializeCache = async (): Promise<Conversation[]> => {
+  if (cachedConversations && isInitialized) {
+    return cachedConversations;
+  }
+
+  try {
+    // 先从 IndexedDB 加载
+    let conversations = await loadFromIndexedDB();
+    
+    // 如果 IndexedDB 为空，尝试从 localStorage 迁移
+    if (conversations.length === 0) {
+      const localData = loadFromLocalStorage();
+      if (localData.length > 0) {
+        console.log('[ConversationService] Migrating data from localStorage to IndexedDB...');
+        for (const conv of localData) {
+          await saveToIndexedDB(conv);
+        }
+        conversations = localData;
+        // 迁移成功后清除 localStorage
+        clearLocalStorage();
+        console.log('[ConversationService] Migration complete');
+      }
+    }
+
+    cachedConversations = conversations.sort((a, b) => b.updatedAt - a.updatedAt);
+    isInitialized = true;
+    return cachedConversations;
+  } catch (error) {
+    console.error('[ConversationService] Failed to initialize:', error);
+    // 降级到 localStorage
+    cachedConversations = loadFromLocalStorage();
+    isInitialized = true;
+    return cachedConversations;
+  }
+};
+
+// 同步获取缓存（用于同步 API）
+const getConversationsSync = (): Conversation[] => {
   if (!cachedConversations) {
-    cachedConversations = loadFromStorage();
+    // 如果缓存未初始化，先从 localStorage 加载作为临时数据
+    cachedConversations = loadFromLocalStorage();
+    // 异步初始化 IndexedDB
+    initializeCache().catch(console.error);
   }
   return cachedConversations;
 };
 
-const updateCache = (conversations: Conversation[]): void => {
-  cachedConversations = conversations;
-  saveToStorage(conversations);
+// 更新缓存并保存
+const updateCacheAndSave = async (conversation: Conversation): Promise<void> => {
+  const conversations = getConversationsSync();
+  const index = conversations.findIndex(c => c.id === conversation.id);
+  
+  if (index >= 0) {
+    conversations[index] = conversation;
+  } else {
+    conversations.unshift(conversation);
+  }
+  
+  // 限制数量
+  if (conversations.length > MAX_CONVERSATIONS) {
+    const removed = conversations.splice(MAX_CONVERSATIONS);
+    // 删除超出的对话
+    for (const conv of removed) {
+      deleteFromIndexedDB(conv.id).catch(console.error);
+    }
+  }
+  
+  cachedConversations = conversations.sort((a, b) => b.updatedAt - a.updatedAt);
+  
+  // 保存到 IndexedDB
+  try {
+    await saveToIndexedDB(conversation);
+  } catch (error) {
+    console.error('[ConversationService] Failed to save conversation:', error);
+  }
 };
 
 // ========== 公开 API ==========
 
 /**
+ * 初始化服务（异步）
+ */
+export const initConversationService = async (): Promise<void> => {
+  await initializeCache();
+};
+
+/**
  * 获取所有对话列表
  */
 export const getAllConversations = (): Conversation[] => {
-  return getConversations();
+  return getConversationsSync();
 };
 
 /**
  * 获取对话列表（简化版，用于侧边栏显示）
  */
 export const getConversationList = (): Array<{ id: string; title: string; time: string }> => {
-  return getConversations().map(conv => ({
+  return getConversationsSync().map(conv => ({
     id: conv.id,
     title: conv.title,
     time: formatTime(conv.updatedAt),
@@ -142,7 +346,7 @@ export const getConversationList = (): Array<{ id: string; title: string; time: 
  * 获取单个对话
  */
 export const getConversation = (id: string): Conversation | null => {
-  return getConversations().find(conv => conv.id === id) || null;
+  return getConversationsSync().find(conv => conv.id === id) || null;
 };
 
 /**
@@ -158,9 +362,8 @@ export const createConversation = (title?: string): Conversation => {
     messages: [],
   };
   
-  const conversations = getConversations();
-  conversations.unshift(conversation);
-  updateCache(conversations);
+  // 异步保存
+  updateCacheAndSave(conversation).catch(console.error);
   
   return conversation;
 };
@@ -169,29 +372,34 @@ export const createConversation = (title?: string): Conversation => {
  * 更新对话标题
  */
 export const updateConversationTitle = (id: string, title: string): Conversation | null => {
-  const conversations = getConversations();
-  const index = conversations.findIndex(conv => conv.id === id);
+  const conversations = getConversationsSync();
+  const conversation = conversations.find(conv => conv.id === id);
   
-  if (index === -1) return null;
+  if (!conversation) return null;
   
-  conversations[index].title = title;
-  conversations[index].updatedAt = Date.now();
-  updateCache(conversations);
+  conversation.title = title;
+  conversation.updatedAt = Date.now();
   
-  return conversations[index];
+  // 异步保存
+  updateCacheAndSave(conversation).catch(console.error);
+  
+  return conversation;
 };
 
 /**
  * 删除对话
  */
 export const deleteConversation = (id: string): boolean => {
-  const conversations = getConversations();
+  const conversations = getConversationsSync();
   const index = conversations.findIndex(conv => conv.id === id);
   
   if (index === -1) return false;
   
   conversations.splice(index, 1);
-  updateCache(conversations);
+  cachedConversations = conversations;
+  
+  // 异步从 IndexedDB 删除
+  deleteFromIndexedDB(id).catch(console.error);
   
   return true;
 };
@@ -200,7 +408,7 @@ export const deleteConversation = (id: string): boolean => {
  * 添加消息到对话
  */
 export const addMessage = (conversationId: string, message: Omit<Message, 'id' | 'timestamp'>): Message | null => {
-  const conversations = getConversations();
+  const conversations = getConversationsSync();
   const conversation = conversations.find(conv => conv.id === conversationId);
   
   if (!conversation) return null;
@@ -219,7 +427,8 @@ export const addMessage = (conversationId: string, message: Omit<Message, 'id' |
     conversation.title = message.content.slice(0, 30) + (message.content.length > 30 ? '...' : '');
   }
   
-  updateCache(conversations);
+  // 异步保存
+  updateCacheAndSave(conversation).catch(console.error);
   
   return newMessage;
 };
@@ -228,7 +437,7 @@ export const addMessage = (conversationId: string, message: Omit<Message, 'id' |
  * 更新消息
  */
 export const updateMessage = (conversationId: string, messageId: string, updates: Partial<Message>): Message | null => {
-  const conversations = getConversations();
+  const conversations = getConversationsSync();
   const conversation = conversations.find(conv => conv.id === conversationId);
   
   if (!conversation) return null;
@@ -242,7 +451,8 @@ export const updateMessage = (conversationId: string, messageId: string, updates
   };
   conversation.updatedAt = Date.now();
   
-  updateCache(conversations);
+  // 异步保存
+  updateCacheAndSave(conversation).catch(console.error);
   
   return conversation.messages[messageIndex];
 };
@@ -259,7 +469,7 @@ export const getMessages = (conversationId: string): Message[] => {
  * 清空对话消息
  */
 export const clearMessages = (conversationId: string): boolean => {
-  const conversations = getConversations();
+  const conversations = getConversationsSync();
   const conversation = conversations.find(conv => conv.id === conversationId);
   
   if (!conversation) return false;
@@ -267,7 +477,8 @@ export const clearMessages = (conversationId: string): boolean => {
   conversation.messages = [];
   conversation.updatedAt = Date.now();
   
-  updateCache(conversations);
+  // 异步保存
+  updateCacheAndSave(conversation).catch(console.error);
   
   return true;
 };
@@ -276,20 +487,21 @@ export const clearMessages = (conversationId: string): boolean => {
  * 清空所有对话
  */
 export const clearAllConversations = (): void => {
-  updateCache([]);
+  cachedConversations = [];
+  clearIndexedDB().catch(console.error);
 };
 
 /**
  * 导出对话数据
  */
 export const exportConversations = (): string => {
-  return JSON.stringify(getConversations(), null, 2);
+  return JSON.stringify(getConversationsSync(), null, 2);
 };
 
 /**
  * 导入对话数据
  */
-export const importConversations = (data: string): boolean => {
+export const importConversations = async (data: string): Promise<boolean> => {
   try {
     const conversations = JSON.parse(data) as Conversation[];
     if (!Array.isArray(conversations)) return false;
@@ -301,7 +513,12 @@ export const importConversations = (data: string): boolean => {
       }
     }
     
-    updateCache(conversations);
+    // 保存到 IndexedDB
+    for (const conv of conversations) {
+      await saveToIndexedDB(conv);
+    }
+    
+    cachedConversations = conversations.sort((a, b) => b.updatedAt - a.updatedAt);
     return true;
   } catch {
     return false;
