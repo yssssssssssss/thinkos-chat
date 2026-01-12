@@ -6,7 +6,7 @@
 import { chatCompletionsStream } from './textModelService';
 import { generateImagesFromWorkflow } from './geminiImageService';
 import { GeneratedImage } from '../types';
-import { log } from '../utils/logger';
+import { log } from '../src/utils/logger';
 
 // ========== 类型定义 ==========
 

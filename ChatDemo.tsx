@@ -30,7 +30,7 @@ import { MarkdownLight } from './components/MarkdownLight';
 import { renderGlassMosaic, loadImageElement } from './utils/glassMosaic';
 import { compressImage } from './utils/imageUtils';
 import { saveImageToLocal } from './utils/imageSaver';
-import { log } from './utils/logger';
+import { log } from './src/utils/logger';
 import { GlassMosaicOptions } from './types';
 
 // ========== 图像处理工具函数 ==========

@@ -3,7 +3,7 @@
  * 将生成的图像保存到本地 output 文件夹
  */
 
-import { log } from './logger';
+import { log } from '../src/utils/logger';
 
 /**
  * 将 Base64 图像保存到本地
