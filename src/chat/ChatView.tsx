@@ -34,7 +34,10 @@ import {
 } from '../../services/conversationService';
 import { compressImage } from '../../utils/imageUtils';
 import { saveImagesBatch } from '../../utils/imageStorage';
-import { log } from '../../utils/logger';
+import { log } from '../utils/logger';
+
+// 导入 Agent Hook
+import { useAgent } from '../hooks/useAgent';
 
 // 导入重构后的组件
 import { Sidebar } from './components/Sidebar';
@@ -46,6 +49,7 @@ import { SystemPromptPanel } from './components/panels/SystemPromptPanel';
 import { GlassMosaicPanel } from './components/panels/GlassMosaicPanel';
 import { MoreToolsPanel } from './components/panels/MoreToolsPanel';
 import { ImageEditModal } from './components/modals/ImageEditModal';
+import { ExpandImageDialog } from './components/dialogs/ExpandImageDialog';
 
 // 导入类型
 import { TabType, ModeType, PanelType, ModelOption, ToolButton } from './types';
@@ -165,6 +169,19 @@ export const ChatView: React.FC = () => {
     url: string;
     action: 'refine' | 'inpaint' | 'remix';
   } | null>(null);
+
+  // Agent 状态和功能
+  const {
+    isExecuting: isAgentExecuting,
+    currentSkill,
+    error: agentError,
+    executeChat,
+    executeSkill,
+    resetError: resetAgentError
+  } = useAgent();
+
+  // 图片扩展对话框状态
+  const [expandDialogImage, setExpandDialogImage] = useState<string | null>(null);
   
   // 服务数据
   const [systemPrompts, setSystemPrompts] = useState<SystemPromptPreset[]>([]);
@@ -283,6 +300,74 @@ export const ChatView: React.FC = () => {
     const selected = systemPrompts.find((p: SystemPromptPreset) => p.id === selectedPromptId);
     return selected?.prompt;
   }, [selectedPromptId, systemPrompts]);
+
+  // 处理 Agent 智能调用
+  const handleAgentInput = async () => {
+    if (!inputText.trim()) return;
+    if (!referenceImage) {
+      log.warn('ChatView', 'Agent 调用需要参考图片');
+      return;
+    }
+
+    const prompt = inputText.trim();
+    setInputText('');
+
+    log.info('ChatView', 'Agent 开始处理用户输入', { prompt });
+
+    // 创建或使用现有对话
+    let conversationId = selectedConversation;
+    if (!conversationId) {
+      const newConv = createConversation(prompt.slice(0, 30));
+      conversationId = newConv.id;
+      setSelectedConversation(conversationId);
+      refreshConversations();
+    }
+
+    // 保存用户操作消息
+    addMessage(conversationId, {
+      role: 'user',
+      content: `🤖 AI 智能处理: ${prompt}`,
+      referenceImage: referenceImage || undefined,
+    });
+    refreshConversations();
+
+    // 调用 Agent 处理
+    const response = await executeChat(prompt);
+
+    // 保存 Agent 响应
+    if (response.success && response.data) {
+      addMessage(conversationId, {
+        role: 'assistant',
+        content: response.message,
+        imageResponses: response.data.imageUrl ? [{
+          modelId: 'expand-image',
+          modelName: '图片扩展',
+          imageUrl: response.data.imageUrl,
+          prompt: prompt,
+          status: 'complete' as const,
+        }] : undefined,
+      });
+
+      // 更新参考图片为处理后的图片
+      if (response.data.imageUrl) {
+        setReferenceImage(response.data.imageUrl);
+      }
+
+      log.info('ChatView', 'Agent 处理成功', { skillId: response.skillId });
+    } else {
+      addMessage(conversationId, {
+        role: 'assistant',
+        content: `❌ ${response.message}`,
+      });
+      log.error('ChatView', 'Agent 处理失败', { error: response.message });
+    }
+
+    refreshConversations();
+
+    // 重新加载当前对话
+    const updatedConv = getConversation(conversationId);
+    setCurrentConversation(updatedConv);
+  };
 
   // 发送消息
   const handleSend = async () => {
@@ -552,13 +637,71 @@ export const ChatView: React.FC = () => {
             onClose={() => setActivePanel('none')}
             onAction={(action: string) => {
               log.info('ChatView', `更多工具: ${action}`);
-              // TODO: 实现各个工具的功能
-            }}
-          />
-        )}
-      </div>
-    );
-  };
+              if (action === 'expand-image') {
+                // 使用当前参考图片或聊天中的图片
+                if (referenceImage) {
+                  setExpandDialogImage(referenceImage);
+                } else {
+                  alert('请先上传或选择一张图片');
+                }
+              }
+              // TODO: 实现其他工具
+          }}
+        />
+      )}
+
+      {/* 图片扩展对话框 */}
+      {expandDialogImage && (
+        <ExpandImageDialog
+          imageUrl={expandDialogImage}
+          onClose={() => setExpandDialogImage(null)}
+          onComplete={(result) => {
+            log.info('ChatView', '图片扩展完成', result);
+            
+            // 创建新对话或使用现有对话
+            let conversationId = selectedConversation;
+            if (!conversationId) {
+              const newConv = createConversation(`图片尺寸扩展`);
+              conversationId = newConv.id;
+              setSelectedConversation(conversationId);
+              refreshConversations();
+            }
+            
+            // 添加用户操作消息
+            addMessage(conversationId, {
+              role: 'user',
+              content: `[图片扩展] ${result.targetWidth}x${result.targetHeight} (${result.mode}模式)`,
+              referenceImage: expandDialogImage,
+            });
+            
+            // 添加 AI 响应（扩展后的图片）
+            addMessage(conversationId, {
+              role: 'assistant',
+              content: '',
+              imageResponses: [{
+                modelId: 'image-expand',
+                modelName: '图片扩展',
+                imageUrl: result.imageUrl,
+                prompt: `${result.originalWidth}x${result.originalHeight} → ${result.targetWidth}x${result.targetHeight}`,
+                status: 'complete' as const,
+              }],
+            });
+            
+            refreshConversations();
+            
+            // 重新加载当前对话
+            const updatedConv = getConversation(conversationId);
+            setCurrentConversation(updatedConv);
+            
+            // 设置为新的参考图
+            setReferenceImage(result.imageUrl);
+            setExpandDialogImage(null);
+          }}
+        />
+      )}
+    </div>
+  );
+};
 
   return (
     <div className="h-screen w-screen flex flex-col bg-gradient-to-b from-gray-50 to-white">
@@ -656,6 +799,8 @@ export const ChatView: React.FC = () => {
               onUrlUpload={handleUrlUpload}
               onToolClick={handleToolClick}
               onClosePanel={() => setActivePanel('none')}
+              onAgentInput={handleAgentInput}
+              isAgentExecuting={isAgentExecuting}
             >
               {renderToolPanel()}
             </InputArea>
