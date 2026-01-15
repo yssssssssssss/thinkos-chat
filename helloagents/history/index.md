@@ -12,6 +12,7 @@
 | 202601141737 | ai_image_expand | 功能 | ✅已完成 | [202601141737_ai_image_expand](2026-01/202601141737_ai_image_expand/) |
 | 202601141747 | embed_tools_modal | 变更 | ✅已完成 | [202601141747_embed_tools_modal](2026-01/202601141747_embed_tools_modal/) |
 | 202601141819 | embed_tools_inapp | 变更 | ✅已完成 | [202601141819_embed_tools_inapp](2026-01/202601141819_embed_tools_inapp/) |
+| 202601151711 | web_tools_xhs_cover | 功能 | ✅已完成 | [202601151711_web_tools_xhs_cover](2026-01/202601151711_web_tools_xhs_cover/) |
 
 ---
 
@@ -23,3 +24,4 @@
 - [202601141737_ai_image_expand](2026-01/202601141737_ai_image_expand/) - AI 图片扩展（Gemini 3 Pro，支持 size 参数扩展背景）
 - [202601141747_embed_tools_modal](2026-01/202601141747_embed_tools_modal/) - 工具入口改为弹窗内嵌打开
 - [202601141819_embed_tools_inapp](2026-01/202601141819_embed_tools_inapp/) - 工具改为应用内弹窗组件（非 iframe），并补齐 APNG 合成/转码进度
+- [202601151711_web_tools_xhs_cover](2026-01/202601151711_web_tools_xhs_cover/) - /web 工具入口：小红书封面 JSON prompts（可选一键生图）

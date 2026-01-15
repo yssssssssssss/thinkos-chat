@@ -9,7 +9,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   Sparkles, Bot, ChevronDown, Menu, X, Settings,
-  MessageSquare, Image, Search, FileText, Palette, MoreHorizontal, FileImage, Film
+  MessageSquare, Image, Search, FileText, Palette, MoreHorizontal, FileImage, Film, Globe
 } from 'lucide-react';
 
 // 导入服务
@@ -49,6 +49,7 @@ import { SystemPromptPanel } from './components/panels/SystemPromptPanel';
 import { GlassMosaicPanel } from './components/panels/GlassMosaicPanel';
 import { MoreToolsPanel } from './components/panels/MoreToolsPanel';
 import { AiImageExpandDialog } from './components/dialogs/AiImageExpandDialog';
+import { WebToolsDialog } from './components/dialogs/WebToolsDialog';
 import { ImageEditModal } from './components/modals/ImageEditModal';
 import { Png2ApngModal } from './components/modals/Png2ApngModal';
 import { Video2GifModal } from './components/modals/Video2GifModal';
@@ -133,6 +134,7 @@ const IMAGE_MODELS: ModelOption[] = [
 const TOOL_BUTTONS: ToolButton[] = [
   { id: 'text-chat', icon: MessageSquare, label: '文本对话', color: 'text-blue-500' },
   { id: 'image-gen', icon: Image, label: '图像生成', color: 'text-pink-500' },
+  { id: 'web', icon: Globe, label: 'Web', color: 'text-teal-600' },
   { id: 'ai-image-expand', icon: Sparkles, label: 'AI图片扩展', color: 'text-purple-500' },
   { id: 'prompt-market', icon: Search, label: 'PromptMarket', color: 'text-orange-500' },
   { id: 'system-prompt', icon: FileText, label: 'SystemPrompt', color: 'text-purple-500' },
@@ -179,6 +181,10 @@ export const ChatView: React.FC = () => {
 
   // AI 图片扩展弹窗
   const [aiImageExpandSourceImage, setAiImageExpandSourceImage] = useState<string | null>(null);
+
+  // /web 工具弹窗
+  const [webToolsOpen, setWebToolsOpen] = useState(false);
+  const [webToolsInitialText, setWebToolsInitialText] = useState<string>('');
 
   // 内嵌工具弹窗
   const [embeddedTool, setEmbeddedTool] = useState<'none' | 'png2apng' | 'video2gif'>('none');
@@ -410,6 +416,17 @@ export const ChatView: React.FC = () => {
     if (!inputText.trim()) return;
 
     const prompt = inputText.trim();
+
+    // Slash 命令：/web 打开 Web 工具弹窗（不发送到对话）
+    if (prompt === '/web' || prompt.startsWith('/web ')) {
+      const rest = prompt.slice(4).trim();
+      setInputText('');
+      setActivePanel('none');
+      setWebToolsInitialText(rest);
+      setWebToolsOpen(true);
+      return;
+    }
+
     setLastPrompt(prompt);
     setIsGenerating(true);
     setShowResults(true);
@@ -585,6 +602,11 @@ export const ChatView: React.FC = () => {
       case 'image-gen':
         setActiveMode('image');
         setActivePanel('models');
+        break;
+      case 'web':
+        setActivePanel('none');
+        setWebToolsInitialText('');
+        setWebToolsOpen(true);
         break;
       case 'ai-image-expand':
         if (!referenceImage) {
@@ -868,6 +890,78 @@ export const ChatView: React.FC = () => {
             // 同时设置为参考图，方便继续后续操作
             setReferenceImage(result.imageUrl);
             setAiImageExpandSourceImage(null);
+          }}
+        />
+      )}
+
+      {/* Web 工具弹窗（/web） */}
+      {webToolsOpen && (
+        <WebToolsDialog
+          initialText={webToolsInitialText}
+          textModelId={textModels.find(m => m.selected)?.id || 'Gemini-2.5-pro'}
+          imageModelId={imageModels.find(m => m.selected)?.id || 'Gemini 3-Pro-Image-Preview'}
+          onClose={() => {
+            setWebToolsOpen(false);
+            setWebToolsInitialText('');
+          }}
+          onComplete={(result) => {
+            log.info('ChatView', 'Web 工具完成', {
+              toolId: result.toolId,
+              template: result.template,
+              generateMode: result.generateMode,
+              images: result.images.length,
+            });
+
+            let conversationId = selectedConversation;
+            if (!conversationId) {
+              const title = (result.parsed?.title || '小红书封面').slice(0, 30);
+              const newConv = createConversation(title);
+              conversationId = newConv.id;
+              setSelectedConversation(conversationId);
+              refreshConversations();
+            }
+
+            const templateName = result.template === 'infographic-pro' ? 'Plan B · Pro' : 'Plan A · 卡通';
+            const modeName =
+              result.generateMode === 'json' ? '仅 JSON' : result.generateMode === 'all' ? '全套生图' : '封面生图';
+            const inputPreview = result.input.length > 280 ? `${result.input.slice(0, 280)}...` : result.input;
+
+            addMessage(conversationId, {
+              role: 'user',
+              content: `[小红书封面] ${templateName} · ${modeName}\n${inputPreview}`,
+            });
+
+            const jsonMarkdown = `\`\`\`json\n${result.jsonText}\n\`\`\``;
+            const imageResponses = result.images.map((img, idx) => ({
+              modelId: `xhs-cover-${img.index}-${idx}`,
+              modelName: `XHS ${img.type} #${img.index}`,
+              imageUrl: img.imageUrl,
+              prompt: img.prompt,
+              status: 'complete' as const,
+            }));
+
+            addMessage(conversationId, {
+              role: 'assistant',
+              content: '',
+              textResponses: [{
+                modelId: 'xhs-cover-json',
+                modelName: 'XHS 封面 JSON',
+                content: jsonMarkdown,
+                status: 'complete' as const,
+              }],
+              imageResponses: imageResponses.length ? imageResponses : undefined,
+            });
+
+            refreshConversations();
+            const updatedConv = getConversation(conversationId);
+            setCurrentConversation(updatedConv);
+
+            if (result.images[0]?.imageUrl) {
+              setReferenceImage(result.images[0].imageUrl);
+            }
+
+            setWebToolsOpen(false);
+            setWebToolsInitialText('');
           }}
         />
       )}
