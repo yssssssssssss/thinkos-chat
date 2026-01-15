@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { Send, Loader2, Paperclip, Link, AlertCircle } from 'lucide-react';
+import { Send, Loader2, Paperclip, Link, AlertCircle, Sparkles } from 'lucide-react';
 import { ToolButton, ModeType } from '../types';
 
 interface InputAreaProps {
@@ -24,6 +24,8 @@ interface InputAreaProps {
   onUrlUpload: (url: string) => void;
   onToolClick: (toolId: string) => void;
   onClosePanel?: () => void; // 新增：关闭面板回调
+  onAgentInput?: () => void; // 新增：AI 智能处理回调
+  isAgentExecuting?: boolean; // 新增：Agent 执行状态
   children?: React.ReactNode; // 用于渲染工具面板
 }
 
@@ -44,6 +46,8 @@ export const InputArea: React.FC<InputAreaProps> = ({
   onUrlUpload,
   onToolClick,
   onClosePanel,
+  onAgentInput,
+  isAgentExecuting = false,
   children,
 }) => {
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -154,7 +158,23 @@ export const InputArea: React.FC<InputAreaProps> = ({
                 </button>
               ))}
             </div>
-            
+
+            {/* AI 智能处理按钮 */}
+            {onAgentInput && referenceImage && (
+              <button
+                onClick={onAgentInput}
+                disabled={!inputText.trim() || isAgentExecuting || isGenerating || !isOnline}
+                title="AI 智能处理（需要参考图片）"
+                className={`p-2.5 rounded-xl transition-all ${
+                  inputText.trim() && !isAgentExecuting && !isGenerating && isOnline
+                    ? 'bg-purple-500 text-white shadow-lg shadow-purple-500/30 hover:bg-purple-600'
+                    : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                }`}
+              >
+                {isAgentExecuting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
+              </button>
+            )}
+
             {/* 发送按钮 */}
             <button onClick={onSend} disabled={!inputText.trim() || isGenerating || !isOnline}
               className={`p-2.5 rounded-xl transition-all ${

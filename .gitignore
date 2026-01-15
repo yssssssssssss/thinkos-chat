@@ -28,3 +28,10 @@ output/*.png
 output/*.jpg
 output/*.jpeg
 output/*.webp
+
+# Temporary files
+tmpclaude-*
+.kiro
+.claude
+nul
+temp.txt

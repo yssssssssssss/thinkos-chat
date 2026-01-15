@@ -176,6 +176,7 @@ type GeminiContents = { role: string; parts: GeminiPart[] } | Array<{ role: stri
 interface GeminiImageRequest {
   model: string;
   contents: GeminiContents;
+  size?: string;
   generation_config?: {
     response_modalities?: string[];
   };
@@ -509,16 +510,17 @@ const generateImageWithJimeng = async (
 /**
  * Gemini 图片生成
  */
-const generateImageWithGeminiFlash = async (
+export const generateImageWithGeminiFlash = async (
   prompt: string,
   inputImage?: ImageInput,
-  model: string = 'Gemini-2.5-flash-image-preview'
+  model: string = 'Gemini-2.5-flash-image-preview',
+  size?: string
 ): Promise<string> => {
   const apiUrl = getApiUrl();
   const apiKey = getApiKey();
   const isJdcloud = apiUrl.startsWith('/jdcloud') || apiUrl.includes('jdcloud.com');
 
-  console.log('[Gemini Image Service] Generating image:', { model, hasInputImage: !!inputImage, apiUrl });
+  console.log('[Gemini Image Service] Generating image:', { model, size, hasInputImage: !!inputImage, apiUrl });
 
   const parts: GeminiPart[] = [];
   for (const imageValue of toImageInputList(inputImage)) {
@@ -533,6 +535,7 @@ const generateImageWithGeminiFlash = async (
   const requestBody: GeminiImageRequest = {
     model,
     contents: isJdcloud ? { role: 'USER', parts } : [{ role: 'user', parts }],
+    ...(size ? { size } : {}),
     generation_config: { response_modalities: ['TEXT', 'IMAGE'] },
     stream: false
   };
@@ -573,6 +576,24 @@ const generateImageWithGeminiFlash = async (
     console.error('[Gemini Image Service] Generation failed:', error);
     throw error;
   }
+};
+
+/**
+ * Gemini 3 Pro 图片扩展（背景延展）
+ * - 将用户输入图片连同 size 参数发送给模型，让模型在保持主体不变的前提下扩展背景。
+ */
+export const expandImageWithGeminiPro = async (
+  inputImage: string,
+  size: string,
+  model: string = 'Gemini 3-Pro-Image-Preview'
+): Promise<string> => {
+  const safeSize = (size || '').trim();
+  if (!safeSize) {
+    throw new Error('size 不能为空');
+  }
+
+  const systemPrompt = `严格保持图片的主图不变，将背景按照需要的${safeSize}尺寸进行扩展`;
+  return generateImageWithGeminiFlash(systemPrompt, inputImage, model, safeSize);
 };
 
 

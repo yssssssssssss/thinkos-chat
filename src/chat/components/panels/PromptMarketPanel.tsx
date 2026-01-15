@@ -23,11 +23,11 @@ export const PromptMarketPanel: React.FC<PromptMarketPanelProps> = ({ onSelect, 
   }, []);
 
   // 获取所有分类
-  const categories = ['all', ...new Set(prompts.map(p => p.category).filter(Boolean))];
+  const categories = ['all', ...Array.from(new Set(prompts.map(p => p.category).filter((cat): cat is string => !!cat)))];
 
   // 过滤提示词
   const filteredPrompts = prompts.filter(p => {
-    const matchSearch = !searchText || 
+    const matchSearch = !searchText ||
       p.title.toLowerCase().includes(searchText.toLowerCase()) ||
       p.prompt.toLowerCase().includes(searchText.toLowerCase());
     const matchCategory = selectedCategory === 'all' || p.category === selectedCategory;
@@ -35,7 +35,7 @@ export const PromptMarketPanel: React.FC<PromptMarketPanelProps> = ({ onSelect, 
   });
 
   return (
-    <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-4 max-h-96 overflow-hidden flex flex-col">
+    <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-6 max-h-[48rem] overflow-hidden flex flex-col">
       <div className="flex items-center justify-between mb-3">
         <h3 className="font-medium text-gray-800 flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-orange-500" />
@@ -52,7 +52,7 @@ export const PromptMarketPanel: React.FC<PromptMarketPanelProps> = ({ onSelect, 
         <input
           type="text"
           value={searchText}
-          onChange={(e) => setSearchText(e.target.value)}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchText(e.target.value)}
           placeholder="搜索提示词..."
           className="w-full pl-9 pr-3 py-2 bg-gray-50 rounded-xl text-sm outline-none focus:ring-2 focus:ring-orange-200"
         />
@@ -60,15 +60,14 @@ export const PromptMarketPanel: React.FC<PromptMarketPanelProps> = ({ onSelect, 
 
       {/* 分类标签 */}
       <div className="flex gap-2 mb-3 overflow-x-auto pb-1">
-        {categories.map(cat => (
+        {categories.map((cat: string) => (
           <button
             key={cat}
             onClick={() => setSelectedCategory(cat)}
-            className={`px-3 py-1 rounded-full text-xs whitespace-nowrap transition ${
-              selectedCategory === cat
+            className={`px-3 py-1 rounded-full text-xs whitespace-nowrap transition ${selectedCategory === cat
                 ? 'bg-orange-100 text-orange-600'
                 : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-            }`}
+              }`}
           >
             {cat === 'all' ? '全部' : cat}
           </button>
@@ -80,7 +79,7 @@ export const PromptMarketPanel: React.FC<PromptMarketPanelProps> = ({ onSelect, 
         {filteredPrompts.length === 0 ? (
           <p className="text-center text-gray-400 text-sm py-4">暂无提示词</p>
         ) : (
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-4 gap-4">
             {filteredPrompts.map(p => (
               <button
                 key={p.id}
@@ -90,9 +89,9 @@ export const PromptMarketPanel: React.FC<PromptMarketPanelProps> = ({ onSelect, 
                 {/* 图片区域 */}
                 <div className="aspect-square bg-gradient-to-br from-orange-100 to-amber-50 flex items-center justify-center overflow-hidden">
                   {p.image ? (
-                    <img 
-                      src={p.image} 
-                      alt={p.title} 
+                    <img
+                      src={p.image}
+                      alt={p.title}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                     />
                   ) : (

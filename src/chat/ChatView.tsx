@@ -7,26 +7,26 @@
  */
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { 
+import {
   Sparkles, Bot, ChevronDown, Menu, X, Settings,
-  MessageSquare, Image, Search, FileText, Palette, MoreHorizontal
+  MessageSquare, Image, Search, FileText, Palette, MoreHorizontal, FileImage, Film
 } from 'lucide-react';
 
 // 导入服务
-import { 
-  generateTextMultiModel, 
+import {
+  generateTextMultiModel,
   generateImageMultiModel,
   retryTextModel,
   retryImageModel,
-  TextModelResponse, 
-  ImageModelResponse 
+  TextModelResponse,
+  ImageModelResponse
 } from '../../services/multiModelService';
 import { getSystemPrompts, SystemPromptPreset } from '../../services/systemPromptService';
 import { getPromptMarks, PromptMarkPreset } from '../../services/promptMarkService';
-import { 
-  getConversationList, 
-  getConversation, 
-  createConversation, 
+import {
+  getConversationList,
+  getConversation,
+  createConversation,
   deleteConversation,
   addMessage,
   initConversationService,
@@ -48,8 +48,10 @@ import { PromptMarketPanel } from './components/panels/PromptMarketPanel';
 import { SystemPromptPanel } from './components/panels/SystemPromptPanel';
 import { GlassMosaicPanel } from './components/panels/GlassMosaicPanel';
 import { MoreToolsPanel } from './components/panels/MoreToolsPanel';
+import { AiImageExpandDialog } from './components/dialogs/AiImageExpandDialog';
 import { ImageEditModal } from './components/modals/ImageEditModal';
-import { ExpandImageDialog } from './components/dialogs/ExpandImageDialog';
+import { Png2ApngModal } from './components/modals/Png2ApngModal';
+import { Video2GifModal } from './components/modals/Video2GifModal';
 
 // 导入类型
 import { TabType, ModeType, PanelType, ModelOption, ToolButton } from './types';
@@ -68,10 +70,10 @@ const isValidImageUrl = (url: string): boolean => {
   const trimmed = url.trim();
   if (!trimmed) return false;
   if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-    return /\.(jpg|jpeg|png|gif|webp|bmp|svg)(\?.*)?$/i.test(trimmed) || 
-           trimmed.includes('/image') || 
-           trimmed.includes('unsplash') ||
-           trimmed.includes('imgur');
+    return /\.(jpg|jpeg|png|gif|webp|bmp|svg)(\?.*)?$/i.test(trimmed) ||
+      trimmed.includes('/image') ||
+      trimmed.includes('unsplash') ||
+      trimmed.includes('imgur');
   }
   if (trimmed.startsWith('data:image/')) {
     return true;
@@ -83,7 +85,7 @@ const urlToBase64 = async (url: string): Promise<string> => {
   if (url.startsWith('data:image/')) {
     return url;
   }
-  
+
   try {
     const response = await fetch(url);
     const blob = await response.blob();
@@ -101,7 +103,7 @@ const urlToBase64 = async (url: string): Promise<string> => {
 
 const processImage = async (source: string | File): Promise<string> => {
   let base64: string;
-  
+
   if (source instanceof File) {
     base64 = await fileToBase64(source);
   } else if (source.startsWith('http')) {
@@ -109,7 +111,7 @@ const processImage = async (source: string | File): Promise<string> => {
   } else {
     base64 = source;
   }
-  
+
   return compressImage(base64, 1600, 0.85);
 };
 
@@ -131,11 +133,15 @@ const IMAGE_MODELS: ModelOption[] = [
 const TOOL_BUTTONS: ToolButton[] = [
   { id: 'text-chat', icon: MessageSquare, label: '文本对话', color: 'text-blue-500' },
   { id: 'image-gen', icon: Image, label: '图像生成', color: 'text-pink-500' },
+  { id: 'ai-image-expand', icon: Sparkles, label: 'AI图片扩展', color: 'text-purple-500' },
   { id: 'prompt-market', icon: Search, label: 'PromptMarket', color: 'text-orange-500' },
   { id: 'system-prompt', icon: FileText, label: 'SystemPrompt', color: 'text-purple-500' },
   { id: 'glass-mosaic', icon: Palette, label: 'GlassMosaic', color: 'text-indigo-500' },
+  { id: 'png2apng', icon: FileImage, label: 'PNG→APNG', color: 'text-emerald-600' },
+  { id: 'video2gif', icon: Film, label: 'Video→GIF', color: 'text-emerald-600' },
   { id: 'more', icon: MoreHorizontal, label: '更多', color: 'text-gray-400' },
 ];
+
 
 export const ChatView: React.FC = () => {
   // 基础状态
@@ -144,17 +150,18 @@ export const ChatView: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [inputText, setInputText] = useState('');
   const [activePanel, setActivePanel] = useState<PanelType>('none');
-  
+  const [showScrollButton, setShowScrollButton] = useState(false);
+
   // 对话管理
   const [conversations, setConversations] = useState<Array<{ id: string; title: string; time: string }>>([]);
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
   const [currentConversation, setCurrentConversation] = useState<Conversation | null>(null);
-  
+
   // 模型选择
   const [textModels, setTextModels] = useState(TEXT_MODELS);
   const [imageModels, setImageModels] = useState(IMAGE_MODELS);
   const [selectedPromptId, setSelectedPromptId] = useState('default');
-  
+
   // 生成状态
   const [referenceImage, setReferenceImage] = useState<string | null>(null);
   const [selectedResultImage, setSelectedResultImage] = useState<string | null>(null);
@@ -163,12 +170,18 @@ export const ChatView: React.FC = () => {
   const [textResponses, setTextResponses] = useState<TextModelResponse[]>([]);
   const [imageResponses, setImageResponses] = useState<ImageModelResponse[]>([]);
   const [lastPrompt, setLastPrompt] = useState('');
-  
+
   // 图像编辑状态
   const [editingImage, setEditingImage] = useState<{
     url: string;
     action: 'refine' | 'inpaint' | 'remix';
   } | null>(null);
+
+  // AI 图片扩展弹窗
+  const [aiImageExpandSourceImage, setAiImageExpandSourceImage] = useState<string | null>(null);
+
+  // 内嵌工具弹窗
+  const [embeddedTool, setEmbeddedTool] = useState<'none' | 'png2apng' | 'video2gif'>('none');
 
   // Agent 状态和功能
   const {
@@ -180,17 +193,14 @@ export const ChatView: React.FC = () => {
     resetError: resetAgentError
   } = useAgent();
 
-  // 图片扩展对话框状态
-  const [expandDialogImage, setExpandDialogImage] = useState<string | null>(null);
-  
   // 服务数据
   const [systemPrompts, setSystemPrompts] = useState<SystemPromptPreset[]>([]);
   // promptMarks 暂时保留用于未来 PromptMarket 面板的扩展功能
   const [, setPromptMarks] = useState<PromptMarkPreset[]>([]);
-  
+
   // 网络状态
   const [isOnline, setIsOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine : true);
-  
+
   // Refs
   const chatScrollRef = useRef<HTMLDivElement>(null);
 
@@ -243,25 +253,51 @@ export const ChatView: React.FC = () => {
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
-    
+
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
-    
+
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
   }, []);
 
+  // 监听滚动事件以显示/隐藏“回到底部”按钮
+  useEffect(() => {
+    const scrollContainer = chatScrollRef.current;
+    if (!scrollContainer) return;
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = scrollContainer;
+      // 如果距离底部超过 300px，显示按钮
+      const isNearBottom = scrollHeight - scrollTop - clientHeight < 300;
+      setShowScrollButton(!isNearBottom);
+    };
+
+    scrollContainer.addEventListener('scroll', handleScroll);
+    return () => scrollContainer.removeEventListener('scroll', handleScroll);
+  }, []);
+
   // 自动滚动
   useEffect(() => {
-    if (chatScrollRef.current && (textResponses.length > 0 || imageResponses.length > 0)) {
+    if (chatScrollRef.current) {
       chatScrollRef.current.scrollTo({
         top: chatScrollRef.current.scrollHeight,
         behavior: 'smooth'
       });
     }
-  }, [textResponses, imageResponses, showResults]);
+  }, [textResponses, imageResponses, showResults, currentConversation?.messages]);
+
+  const scrollToBottom = () => {
+    if (chatScrollRef.current) {
+      chatScrollRef.current.scrollTo({
+        top: chatScrollRef.current.scrollHeight,
+        behavior: 'smooth'
+      });
+    }
+  };
+
 
   // 对话管理函数
   const refreshConversations = useCallback(() => {
@@ -372,16 +408,16 @@ export const ChatView: React.FC = () => {
   // 发送消息
   const handleSend = async () => {
     if (!inputText.trim()) return;
-    
+
     const prompt = inputText.trim();
     setLastPrompt(prompt);
     setIsGenerating(true);
     setShowResults(true);
     setInputText('');
 
-    log.info('ChatView', `开始发送消息 [${activeMode}模式]`, { 
-      prompt: prompt.slice(0, 100), 
-      hasReference: !!referenceImage 
+    log.info('ChatView', `开始发送消息 [${activeMode}模式]`, {
+      prompt: prompt.slice(0, 100),
+      hasReference: !!referenceImage
     });
 
     // 创建或使用现有对话
@@ -433,11 +469,11 @@ export const ChatView: React.FC = () => {
                 })),
               });
               refreshConversations();
-              
+
               // 重新加载当前对话以更新历史消息
               const updatedConv = getConversation(conversationId);
               setCurrentConversation(updatedConv);
-              
+
               // 清空当前响应状态，避免重复显示
               setTextResponses([]);
               setLastPrompt('');
@@ -465,7 +501,7 @@ export const ChatView: React.FC = () => {
           const allDone = responses.every(r => r.status === 'complete' || r.status === 'error');
           if (allDone) {
             setIsGenerating(false);
-            
+
             // 静默保存成功生成的图片到 IndexedDB（用户无感知）
             const successfulImages = responses
               .filter(r => r.status === 'complete' && r.image?.url)
@@ -474,13 +510,13 @@ export const ChatView: React.FC = () => {
                 modelName: r.modelName,
                 prompt: prompt
               }));
-            
+
             if (successfulImages.length > 0) {
               saveImagesBatch(successfulImages).then(ids => {
                 log.info('ChatView', `静默保存 ${ids.length} 张图片到本地存储`);
               });
             }
-            
+
             // 保存到对话历史
             if (conversationId) {
               addMessage(conversationId, {
@@ -496,11 +532,11 @@ export const ChatView: React.FC = () => {
                 })),
               });
               refreshConversations();
-              
+
               // 重新加载当前对话以更新历史消息
               const updatedConv = getConversation(conversationId);
               setCurrentConversation(updatedConv);
-              
+
               // 清空当前响应状态，避免重复显示
               setImageResponses([]);
               setLastPrompt('');
@@ -550,6 +586,14 @@ export const ChatView: React.FC = () => {
         setActiveMode('image');
         setActivePanel('models');
         break;
+      case 'ai-image-expand':
+        if (!referenceImage) {
+          alert('请先上传图片');
+          break;
+        }
+        setAiImageExpandSourceImage(referenceImage);
+        setActivePanel('none');
+        break;
       case 'prompt-market':
         setActivePanel(activePanel === 'promptMarket' ? 'none' : 'promptMarket');
         break;
@@ -562,6 +606,14 @@ export const ChatView: React.FC = () => {
       case 'more':
         setActivePanel(activePanel === 'moreTools' ? 'none' : 'moreTools');
         break;
+      case 'png2apng':
+        setEmbeddedTool('png2apng');
+        setActivePanel('none');
+        break;
+      case 'video2gif':
+        setEmbeddedTool('video2gif');
+        setActivePanel('none');
+        break;
     }
   };
 
@@ -572,19 +624,17 @@ export const ChatView: React.FC = () => {
         <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
           <Sparkles className="w-4 h-4 text-white" />
         </div>
-        <span className="font-semibold text-lg text-gray-800">GeminiFlow</span>
+        <span className="font-semibold text-lg text-gray-800">thinkos</span>
       </div>
       <nav className="flex gap-1">
-        <button onClick={() => setActiveTab('chat')} 
-          className={`px-5 py-2 rounded-full text-sm font-medium transition-all ${
-            activeTab === 'chat' ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-100'
-          }`}>
+        <button onClick={() => setActiveTab('chat')}
+          className={`px-5 py-2 rounded-full text-sm font-medium transition-all ${activeTab === 'chat' ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-100'
+            }`}>
           AI 对话
         </button>
-        <button onClick={() => setActiveTab('canvas')} 
-          className={`px-5 py-2 rounded-full text-sm font-medium transition-all ${
-            activeTab === 'canvas' ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-100'
-          }`}>
+        <button onClick={() => setActiveTab('canvas')}
+          className={`px-5 py-2 rounded-full text-sm font-medium transition-all ${activeTab === 'canvas' ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-100'
+            }`}>
           Canvas
         </button>
       </nav>
@@ -615,10 +665,12 @@ export const ChatView: React.FC = () => {
           />
         )}
         {activePanel === 'promptMarket' && (
-          <PromptMarketPanel
-            onSelect={(prompt: string) => setInputText(prompt)}
-            onClose={() => setActivePanel('none')}
-          />
+          <div className="w-[150%] left-1/2 -translate-x-1/2 relative">
+            <PromptMarketPanel
+              onSelect={(prompt: string) => setInputText(prompt)}
+              onClose={() => setActivePanel('none')}
+            />
+          </div>
         )}
         {activePanel === 'systemPrompt' && (
           <SystemPromptPanel
@@ -637,71 +689,12 @@ export const ChatView: React.FC = () => {
             onClose={() => setActivePanel('none')}
             onAction={(action: string) => {
               log.info('ChatView', `更多工具: ${action}`);
-              if (action === 'expand-image') {
-                // 使用当前参考图片或聊天中的图片
-                if (referenceImage) {
-                  setExpandDialogImage(referenceImage);
-                } else {
-                  alert('请先上传或选择一张图片');
-                }
-              }
-              // TODO: 实现其他工具
-          }}
-        />
-      )}
-
-      {/* 图片扩展对话框 */}
-      {expandDialogImage && (
-        <ExpandImageDialog
-          imageUrl={expandDialogImage}
-          onClose={() => setExpandDialogImage(null)}
-          onComplete={(result) => {
-            log.info('ChatView', '图片扩展完成', result);
-            
-            // 创建新对话或使用现有对话
-            let conversationId = selectedConversation;
-            if (!conversationId) {
-              const newConv = createConversation(`图片尺寸扩展`);
-              conversationId = newConv.id;
-              setSelectedConversation(conversationId);
-              refreshConversations();
-            }
-            
-            // 添加用户操作消息
-            addMessage(conversationId, {
-              role: 'user',
-              content: `[图片扩展] ${result.targetWidth}x${result.targetHeight} (${result.mode}模式)`,
-              referenceImage: expandDialogImage,
-            });
-            
-            // 添加 AI 响应（扩展后的图片）
-            addMessage(conversationId, {
-              role: 'assistant',
-              content: '',
-              imageResponses: [{
-                modelId: 'image-expand',
-                modelName: '图片扩展',
-                imageUrl: result.imageUrl,
-                prompt: `${result.originalWidth}x${result.originalHeight} → ${result.targetWidth}x${result.targetHeight}`,
-                status: 'complete' as const,
-              }],
-            });
-            
-            refreshConversations();
-            
-            // 重新加载当前对话
-            const updatedConv = getConversation(conversationId);
-            setCurrentConversation(updatedConv);
-            
-            // 设置为新的参考图
-            setReferenceImage(result.imageUrl);
-            setExpandDialogImage(null);
-          }}
-        />
-      )}
-    </div>
-  );
-};
+            }}
+          />
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="h-screen w-screen flex flex-col bg-gradient-to-b from-gray-50 to-white">
@@ -750,7 +743,7 @@ export const ChatView: React.FC = () => {
                 }}
                 onRetryTextModel={async (modelId: string, modelName: string) => {
                   if (!lastPrompt) return;
-                  setTextResponses((prev: TextModelResponse[]) => prev.map((r: TextModelResponse) => 
+                  setTextResponses((prev: TextModelResponse[]) => prev.map((r: TextModelResponse) =>
                     r.modelId === modelId ? { ...r, status: 'streaming' as const, content: '', error: undefined } : r
                   ));
                   await retryTextModel(modelId, modelName, lastPrompt, getSelectedSystemPrompt(), (response) => {
@@ -759,7 +752,7 @@ export const ChatView: React.FC = () => {
                 }}
                 onRetryImageModel={async (modelId: string, modelName: string) => {
                   if (!lastPrompt) return;
-                  setImageResponses((prev: ImageModelResponse[]) => prev.map((r: ImageModelResponse) => 
+                  setImageResponses((prev: ImageModelResponse[]) => prev.map((r: ImageModelResponse) =>
                     r.modelId === modelId ? { ...r, status: 'streaming' as const, image: undefined, error: undefined } : r
                   ));
                   await retryImageModel(modelId, modelName, lastPrompt, referenceImage, (response) => {
@@ -781,6 +774,17 @@ export const ChatView: React.FC = () => {
                 }}
               />
             </div>
+
+            {/* 回到底部按钮 */}
+            {showScrollButton && (
+              <button
+                onClick={scrollToBottom}
+                className="fixed bottom-32 right-8 p-3 bg-white border border-gray-100 rounded-full shadow-lg text-gray-500 hover:text-gray-800 hover:bg-gray-50 transition-all z-10 animate-bounce"
+                title="回到底部"
+              >
+                <ChevronDown className="w-6 h-6" />
+              </button>
+            )}
 
             <InputArea
               inputText={inputText}
@@ -818,6 +822,56 @@ export const ChatView: React.FC = () => {
         </div>
       )}
 
+      {/* AI 图片扩展弹窗（Gemini 3 Pro） */}
+      {aiImageExpandSourceImage && (
+        <AiImageExpandDialog
+          imageUrl={aiImageExpandSourceImage}
+          onClose={() => setAiImageExpandSourceImage(null)}
+          onComplete={(result) => {
+            log.info('ChatView', 'AI 图片扩展完成', { size: result.size, model: result.model });
+
+            // 将扩展后的图片添加到对话历史
+            let conversationId = selectedConversation;
+            if (!conversationId) {
+              const newConv = createConversation('AI 图片扩展');
+              conversationId = newConv.id;
+              setSelectedConversation(conversationId);
+              refreshConversations();
+            }
+
+            // 添加用户操作消息
+            addMessage(conversationId, {
+              role: 'user',
+              content: `[AI 图片扩展] size=${result.size}`,
+              referenceImage: aiImageExpandSourceImage,
+            });
+
+            // 添加 AI 响应（扩展后的图片）
+            addMessage(conversationId, {
+              role: 'assistant',
+              content: '',
+              imageResponses: [{
+                modelId: 'ai-image-expand',
+                modelName: 'AI 图片扩展',
+                imageUrl: result.imageUrl,
+                prompt: `严格保持图片的主图不变，将背景按照需要的${result.size}尺寸进行扩展`,
+                status: 'complete' as const,
+              }],
+            });
+
+            refreshConversations();
+
+            // 重新加载当前对话以更新历史消息
+            const updatedConv = getConversation(conversationId);
+            setCurrentConversation(updatedConv);
+
+            // 同时设置为参考图，方便继续后续操作
+            setReferenceImage(result.imageUrl);
+            setAiImageExpandSourceImage(null);
+          }}
+        />
+      )}
+
       {/* 图像编辑弹窗 */}
       {editingImage && (
         <ImageEditModal
@@ -826,7 +880,7 @@ export const ChatView: React.FC = () => {
           onClose={() => setEditingImage(null)}
           onComplete={(newImageUrl: string, action: 'refine' | 'inpaint' | 'remix', editPrompt: string) => {
             log.info('ChatView', '图像编辑完成', { action, newImageUrl: newImageUrl.slice(0, 100) });
-            
+
             // 将编辑后的图片添加到对话历史
             let conversationId = selectedConversation;
             if (!conversationId) {
@@ -835,7 +889,7 @@ export const ChatView: React.FC = () => {
               setSelectedConversation(conversationId);
               refreshConversations();
             }
-            
+
             // 添加用户操作消息
             const actionName = action === 'refine' ? '优化图像' : action === 'inpaint' ? '局部重绘' : '风格混合';
             addMessage(conversationId, {
@@ -843,7 +897,7 @@ export const ChatView: React.FC = () => {
               content: `[${actionName}] ${editPrompt}`,
               referenceImage: editingImage.url,
             });
-            
+
             // 添加 AI 响应（编辑后的图片）
             addMessage(conversationId, {
               role: 'assistant',
@@ -856,19 +910,23 @@ export const ChatView: React.FC = () => {
                 status: 'complete' as const,
               }],
             });
-            
+
             refreshConversations();
-            
+
             // 重新加载当前对话以更新历史消息
             const updatedConv = getConversation(conversationId);
             setCurrentConversation(updatedConv);
-            
+
             // 同时设置为参考图，方便继续编辑
             setReferenceImage(newImageUrl);
             setEditingImage(null);
           }}
         />
       )}
+
+      {/* 内嵌工具弹窗 */}
+      {embeddedTool === 'png2apng' && <Png2ApngModal onClose={() => setEmbeddedTool('none')} />}
+      {embeddedTool === 'video2gif' && <Video2GifModal onClose={() => setEmbeddedTool('none')} />}
     </div>
   );
 };

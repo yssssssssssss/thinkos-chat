@@ -3,7 +3,7 @@ import {
   MessageSquare, Plus, Send, Settings, ChevronDown, Menu, X, Sparkles, 
   Image, Check, Loader2, Copy, RotateCcw, Download, Edit2, Sliders, 
   Wand2, Search, BookOpen, Palette, FileText, Upload, Paperclip, 
-  MoreHorizontal, Bot, Zap, AlertCircle, Link, Trash2
+  MoreHorizontal, Bot, Zap, AlertCircle, Link, Trash2, FileImage, Film
 } from 'lucide-react';
 import { 
   generateTextMultiModel, 
@@ -32,6 +32,7 @@ import { compressImage } from './utils/imageUtils';
 import { saveImageToLocal } from './utils/imageSaver';
 import { log } from './src/utils/logger';
 import { GlassMosaicOptions } from './types';
+import { EmbeddedToolModal } from './src/chat/components/modals/EmbeddedToolModal';
 
 // ========== 图像处理工具函数 ==========
 // 将文件转换为 Base64 格式
@@ -135,6 +136,8 @@ const TOOL_BUTTONS = [
   { id: 'prompt-market', icon: Search, label: 'PromptMarket', color: 'text-orange-500' },
   { id: 'system-prompt', icon: FileText, label: 'SystemPrompt', color: 'text-purple-500' },
   { id: 'glass-mosaic', icon: Palette, label: 'GlassMosaic', color: 'text-indigo-500' },
+  { id: 'png2apng', icon: FileImage, label: 'PNG→APNG', color: 'text-emerald-600' },
+  { id: 'video2gif', icon: Film, label: 'Video→GIF', color: 'text-emerald-600' },
   { id: 'more', icon: MoreHorizontal, label: '更多', color: 'text-gray-400' },
 ];
 
@@ -159,6 +162,7 @@ const ChatDemo: React.FC = () => {
   const [imageModels, setImageModels] = useState(IMAGE_MODELS);
   const [selectedPromptId, setSelectedPromptId] = useState('default');
   const [activePanel, setActivePanel] = useState<PanelType>('none');
+  const [embeddedTool, setEmbeddedTool] = useState<'none' | 'png2apng' | 'video2gif'>('none');
   const [referenceImage, setReferenceImage] = useState<string | null>(null);
   const [selectedResultImage, setSelectedResultImage] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -776,6 +780,14 @@ const ChatDemo: React.FC = () => {
         break;
       case 'more':
         setActivePanel(activePanel === 'moreTools' ? 'none' : 'moreTools');
+        break;
+      case 'png2apng':
+        setEmbeddedTool('png2apng');
+        setActivePanel('none');
+        break;
+      case 'video2gif':
+        setEmbeddedTool('video2gif');
+        setActivePanel('none');
         break;
     }
   };
@@ -1716,6 +1728,15 @@ const ChatDemo: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* 内嵌工具弹窗 */}
+      {embeddedTool !== 'none' && (
+        <EmbeddedToolModal
+          title={embeddedTool === 'png2apng' ? 'PNG 转 APNG' : '视频转 GIF'}
+          src={embeddedTool === 'png2apng' ? '/tools/png2apng/' : '/tools/video2gif/'}
+          onClose={() => setEmbeddedTool('none')}
+        />
       )}
     </>
   );

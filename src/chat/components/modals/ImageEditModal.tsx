@@ -13,7 +13,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { X, Wand2, Edit2, Sliders, Loader2, Send } from 'lucide-react';
 import { editImageWithGeminiFlash, editImageWithSeedream } from '../../../../services/geminiImageService';
 import { saveImageSilently } from '../../../../utils/imageStorage';
-import { log } from '../../../../utils/logger';
+import { log } from '../../../utils/logger';
 
 type EditAction = 'refine' | 'inpaint' | 'remix';
 
