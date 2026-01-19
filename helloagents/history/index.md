@@ -14,6 +14,7 @@
 | 202601141819 | embed_tools_inapp | 变更 | ✅已完成 | [202601141819_embed_tools_inapp](2026-01/202601141819_embed_tools_inapp/) |
 | 202601151711 | web_tools_xhs_cover | 功能 | ✅已完成 | [202601151711_web_tools_xhs_cover](2026-01/202601151711_web_tools_xhs_cover/) |
 | 202601171800 | lumina_particleize_modal | 功能 | ✅已完成 | [202601171800_lumina_particleize_modal](2026-01/202601171800_lumina_particleize_modal/) |
+| 202601191223 | canvas_chat_workspace_v2 | 变更 | ✅已完成 | [202601191223_canvas_chat_workspace_v2](2026-01/202601191223_canvas_chat_workspace_v2/) |
 
 ---
 
@@ -27,3 +28,4 @@
 - [202601141819_embed_tools_inapp](2026-01/202601141819_embed_tools_inapp/) - 工具改为应用内弹窗组件（非 iframe），并补齐 APNG 合成/转码进度
 - [202601151711_web_tools_xhs_cover](2026-01/202601151711_web_tools_xhs_cover/) - /web 工具入口：小红书封面 JSON prompts（可选一键生图）
 - [202601171800_lumina_particleize_modal](2026-01/202601171800_lumina_particleize_modal/) - Lumina 粒子化工具弹窗入口（并移除“更多”按钮）
+- [202601191223_canvas_chat_workspace_v2](2026-01/202601191223_canvas_chat_workspace_v2/) - Workspace 双栏 + 自由画板（Board）联动与持久化

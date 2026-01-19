@@ -22,6 +22,7 @@ type ApngConfig = {
 
 interface Png2ApngModalProps {
   onClose: () => void;
+  onGenerated?: (result: { blob: Blob; filename: string }) => void;
 }
 
 const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
@@ -180,7 +181,7 @@ const generateApng = async (frames: FrameItem[], config: ApngConfig): Promise<Bl
   return new Blob([modified], { type: 'image/apng' });
 };
 
-export const Png2ApngModal: React.FC<Png2ApngModalProps> = ({ onClose }) => {
+export const Png2ApngModal: React.FC<Png2ApngModalProps> = ({ onClose, onGenerated }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const framesRef = useRef<FrameItem[]>([]);
   const previewUrlRef = useRef<string | null>(null);
@@ -190,6 +191,7 @@ export const Png2ApngModal: React.FC<Png2ApngModalProps> = ({ onClose }) => {
   const [config, setConfig] = useState<ApngConfig>({ fps: 15, loops: 0, quality: 80 });
   const [isGenerating, setIsGenerating] = useState(false);
   const [apngBlob, setApngBlob] = useState<Blob | null>(null);
+  const [resultFilename, setResultFilename] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -199,6 +201,7 @@ export const Png2ApngModal: React.FC<Png2ApngModalProps> = ({ onClose }) => {
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     setPreviewUrl(null);
     setApngBlob(null);
+    setResultFilename(null);
   };
 
   const cleanupFramePreviews = (items: FrameItem[]) => {
@@ -335,8 +338,11 @@ export const Png2ApngModal: React.FC<Png2ApngModalProps> = ({ onClose }) => {
 
     try {
       const blob = await generateApng(frames, config);
+      const filename = `animation_${Date.now()}.png`;
+      setResultFilename(filename);
       setApngBlob(blob);
       setPreviewUrl(URL.createObjectURL(blob));
+      onGenerated?.({ blob, filename });
     } catch (e) {
       const message = e instanceof Error ? e.message : '生成失败，请重试';
       setError(message);
@@ -347,7 +353,7 @@ export const Png2ApngModal: React.FC<Png2ApngModalProps> = ({ onClose }) => {
 
   const handleDownload = () => {
     if (!apngBlob) return;
-    downloadBlob(apngBlob, `animation_${Date.now()}.png`);
+    downloadBlob(apngBlob, resultFilename || `animation_${Date.now()}.png`);
   };
 
   return (

@@ -3,6 +3,7 @@ import React, { useEffect } from 'react';
 // import ChatDemo from './ChatDemo'; // 旧版本
 import ChatView from './src/chat/ChatView'; // 重构后的版本
 import { SkillService } from './src/services/skillService';
+import Workspace from './src/workspace/Workspace';
 
 function App() {
   // 应用启动时初始化 Skills
@@ -13,7 +14,7 @@ function App() {
   return (
     <div className="bg-white text-black h-screen w-screen">
       {/* <Canvas /> */}
-      <ChatView />
+      <Workspace />
     </div>
   );
 }

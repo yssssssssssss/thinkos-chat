@@ -8,7 +8,7 @@
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
-  Sparkles, Bot, ChevronDown, Menu, X, Settings,
+  Sparkles, Bot, ChevronDown, Settings, Plus,
   MessageSquare, Image, Search, FileText, Palette, FileImage, Film, Globe, Wand2
 } from 'lucide-react';
 
@@ -40,7 +40,6 @@ import { log } from '../utils/logger';
 import { useAgent } from '../hooks/useAgent';
 
 // 导入重构后的组件
-import { Sidebar } from './components/Sidebar';
 import { ChatArea } from './components/ChatArea';
 import { InputArea } from './components/InputArea';
 import { ModelPanel } from './components/panels/ModelPanel';
@@ -54,10 +53,13 @@ import { ImageEditModal } from './components/modals/ImageEditModal';
 import { Png2ApngModal } from './components/modals/Png2ApngModal';
 import { Video2GifModal } from './components/modals/Video2GifModal';
 import LuminaParticleizeModal from './components/modals/LuminaParticleizeModal';
+import RecentConversationsModal from './components/modals/RecentConversationsModal';
 import { DEFAULT_LUMINA_PARTICLEIZE_CONFIG, DEFAULT_LUMINA_PARTICLEIZE_IMAGE_SRC } from './components/particleize/defaults';
 
 // 导入类型
 import { TabType, ModeType, PanelType, ModelOption, ToolButton } from './types';
+import type { ConversationImageAsset } from '../board/types';
+import { useWorkspace } from '../workspace/WorkspaceContext';
 
 // 图像处理工具函数
 const fileToBase64 = (file: File): Promise<string> => {
@@ -151,7 +153,7 @@ export const ChatView: React.FC = () => {
   // 基础状态
   const [activeTab, setActiveTab] = useState<TabType>('chat');
   const [activeMode, setActiveMode] = useState<ModeType>('text');
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [recentConversationsOpen, setRecentConversationsOpen] = useState(false);
   const [inputText, setInputText] = useState('');
   const [activePanel, setActivePanel] = useState<PanelType>('none');
   const [showScrollButton, setShowScrollButton] = useState(false);
@@ -195,6 +197,8 @@ export const ChatView: React.FC = () => {
   const [particleizeOpen, setParticleizeOpen] = useState(false);
   const [particleizeImageSrc, setParticleizeImageSrc] = useState<string | null>(null);
   const [particleizeConfig, setParticleizeConfig] = useState(DEFAULT_LUMINA_PARTICLEIZE_CONFIG);
+
+  const { board, registerChatHandlers } = useWorkspace();
 
   // Agent 状态和功能
   const {
@@ -261,6 +265,47 @@ export const ChatView: React.FC = () => {
       setLastPrompt('');
     }
   }, [selectedConversation]);
+
+  useEffect(() => {
+    registerChatHandlers({
+      setReferenceImage,
+      openTool: (tool) => {
+        if (tool === 'png2apng') setEmbeddedTool('png2apng');
+        if (tool === 'video2gif') setEmbeddedTool('video2gif');
+        if (tool === 'particleize') setParticleizeOpen(true);
+      },
+    });
+  }, [registerChatHandlers]);
+
+  const syncConversationImagesToBoard = useCallback(
+    (conversationId: string) => {
+      const conv = getConversation(conversationId);
+      if (!conv) return;
+
+      const assets: ConversationImageAsset[] = [];
+      for (const msg of conv.messages) {
+        if (msg.role !== 'assistant') continue;
+        const responses = msg.imageResponses || [];
+        for (let idx = 0; idx < responses.length; idx++) {
+          const resp = responses[idx];
+          if (resp.status !== 'complete') continue;
+          if (!resp.imageUrl) continue;
+          assets.push({
+            conversationId,
+            messageId: msg.id,
+            imageIndex: idx,
+            imageUrl: resp.imageUrl,
+            modelName: resp.modelName,
+            prompt: resp.prompt,
+            createdAt: msg.timestamp,
+          });
+        }
+      }
+
+      board.upsertConversationImages(assets);
+    },
+    [board]
+  );
 
   // 网络状态监听
   useEffect(() => {
@@ -416,6 +461,7 @@ export const ChatView: React.FC = () => {
     // 重新加载当前对话
     const updatedConv = getConversation(conversationId);
     setCurrentConversation(updatedConv);
+    syncConversationImagesToBoard(conversationId);
   };
 
   // 发送消息
@@ -497,6 +543,7 @@ export const ChatView: React.FC = () => {
               // 重新加载当前对话以更新历史消息
               const updatedConv = getConversation(conversationId);
               setCurrentConversation(updatedConv);
+              syncConversationImagesToBoard(conversationId);
 
               // 清空当前响应状态，避免重复显示
               setTextResponses([]);
@@ -560,6 +607,7 @@ export const ChatView: React.FC = () => {
               // 重新加载当前对话以更新历史消息
               const updatedConv = getConversation(conversationId);
               setCurrentConversation(updatedConv);
+              syncConversationImagesToBoard(conversationId);
 
               // 清空当前响应状态，避免重复显示
               setImageResponses([]);
@@ -728,26 +776,40 @@ export const ChatView: React.FC = () => {
   };
 
   return (
-    <div className="h-screen w-screen flex flex-col bg-gradient-to-b from-gray-50 to-white">
+    <div className="h-full w-full flex flex-col bg-gradient-to-b from-gray-200 to-gray-100">
       {renderHeader()}
 
       {activeTab === 'chat' ? (
         <div className="flex-1 flex overflow-hidden">
-          <Sidebar
-            isOpen={sidebarOpen}
-            conversations={conversations}
-            selectedConversation={selectedConversation}
-            onNewConversation={handleNewConversation}
-            onSelectConversation={setSelectedConversation}
-            onDeleteConversation={handleDeleteConversation}
-          />
-
           <main className="flex-1 flex flex-col overflow-hidden">
             <div className="px-6 py-3 border-b border-gray-100 bg-white/80 backdrop-blur-sm flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <button onClick={() => setSidebarOpen(!sidebarOpen)} className="p-2 hover:bg-gray-100 rounded-xl lg:hidden">
-                  {sidebarOpen ? <X className="w-5 h-5 text-gray-500" /> : <Menu className="w-5 h-5 text-gray-500" />}
+                <button
+                  onClick={() => {
+                    setActivePanel('none');
+                    setRecentConversationsOpen(false);
+                    handleNewConversation();
+                  }}
+                  className="px-3 py-1.5 rounded-xl text-sm flex items-center gap-2 border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 transition"
+                  title="新建对话"
+                >
+                  <Plus className="w-4 h-4" />
+                  新建对话
                 </button>
+
+                <button
+                  onClick={() => {
+                    setActivePanel('none');
+                    setRecentConversationsOpen(true);
+                  }}
+                  className="px-3 py-1.5 rounded-xl text-sm flex items-center gap-2 border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 transition"
+                  title="最近对话"
+                >
+                  <MessageSquare className="w-4 h-4" />
+                  最近对话
+                </button>
+
+                <div className="h-6 w-px bg-gray-200 mx-1" />
                 <h2 className="font-medium text-gray-700">多模型对比测试</h2>
               </div>
               <span className="px-2 py-1 bg-gray-100 rounded-lg text-xs text-gray-500">
@@ -839,6 +901,19 @@ export const ChatView: React.FC = () => {
             >
               {renderToolPanel()}
             </InputArea>
+
+            {recentConversationsOpen && (
+              <RecentConversationsModal
+                conversations={conversations}
+                selectedConversationId={selectedConversation}
+                onSelect={(id) => {
+                  setSelectedConversation(id);
+                  setRecentConversationsOpen(false);
+                }}
+                onDelete={handleDeleteConversation}
+                onClose={() => setRecentConversationsOpen(false)}
+              />
+            )}
           </main>
         </div>
       ) : (
@@ -895,6 +970,7 @@ export const ChatView: React.FC = () => {
             // 重新加载当前对话以更新历史消息
             const updatedConv = getConversation(conversationId);
             setCurrentConversation(updatedConv);
+            syncConversationImagesToBoard(conversationId);
 
             // 同时设置为参考图，方便继续后续操作
             setReferenceImage(result.imageUrl);
@@ -964,6 +1040,7 @@ export const ChatView: React.FC = () => {
             refreshConversations();
             const updatedConv = getConversation(conversationId);
             setCurrentConversation(updatedConv);
+            syncConversationImagesToBoard(conversationId);
 
             if (result.images[0]?.imageUrl) {
               setReferenceImage(result.images[0].imageUrl);
@@ -1019,6 +1096,7 @@ export const ChatView: React.FC = () => {
             // 重新加载当前对话以更新历史消息
             const updatedConv = getConversation(conversationId);
             setCurrentConversation(updatedConv);
+            syncConversationImagesToBoard(conversationId);
 
             // 同时设置为参考图，方便继续编辑
             setReferenceImage(newImageUrl);
@@ -1028,8 +1106,22 @@ export const ChatView: React.FC = () => {
       )}
 
       {/* 内嵌工具弹窗 */}
-      {embeddedTool === 'png2apng' && <Png2ApngModal onClose={() => setEmbeddedTool('none')} />}
-      {embeddedTool === 'video2gif' && <Video2GifModal onClose={() => setEmbeddedTool('none')} />}
+      {embeddedTool === 'png2apng' && (
+        <Png2ApngModal
+          onClose={() => setEmbeddedTool('none')}
+          onGenerated={({ blob, filename }) => {
+            void board.addBlobItem({ kind: 'apng', blob, filename, meta: { source: 'png2apng' } });
+          }}
+        />
+      )}
+      {embeddedTool === 'video2gif' && (
+        <Video2GifModal
+          onClose={() => setEmbeddedTool('none')}
+          onGenerated={({ blob, filename }) => {
+            void board.addBlobItem({ kind: 'gif', blob, filename, meta: { source: 'video2gif' } });
+          }}
+        />
+      )}
 
       {particleizeOpen && (
         <LuminaParticleizeModal
@@ -1038,6 +1130,9 @@ export const ChatView: React.FC = () => {
           config={particleizeConfig}
           setConfig={setParticleizeConfig}
           onClose={() => setParticleizeOpen(false)}
+          onVideoExported={(blob, filename) => {
+            void board.addBlobItem({ kind: 'video', blob, filename, meta: { source: 'particleize' } });
+          }}
         />
       )}
     </div>

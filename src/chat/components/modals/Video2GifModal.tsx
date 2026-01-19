@@ -44,6 +44,7 @@ type ConversionResult = {
 
 interface Video2GifModalProps {
   onClose: () => void;
+  onGenerated?: (result: { blob: Blob; filename: string }) => void;
 }
 
 const SUPPORTED_EXT = ['.mp4', '.mov', '.avi', '.mkv', '.webm'] as const;
@@ -325,7 +326,7 @@ class FFmpegService {
 
 const ffmpegService = new FFmpegService();
 
-export const Video2GifModal: React.FC<Video2GifModalProps> = ({ onClose }) => {
+export const Video2GifModal: React.FC<Video2GifModalProps> = ({ onClose, onGenerated }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoObjectUrlRef = useRef<string | null>(null);
   const gifObjectUrlRef = useRef<string | null>(null);
@@ -461,12 +462,13 @@ export const Video2GifModal: React.FC<Video2GifModalProps> = ({ onClose }) => {
       gifObjectUrlRef.current = res.url;
       setResult(res);
       setActiveTab('gif');
+      onGenerated?.({ blob: res.blob, filename: res.filename });
     } catch (e) {
       setError(e instanceof Error ? e.message : '转换失败');
     } finally {
       setIsConverting(false);
     }
-  }, [options, videoFile, videoInfo]);
+  }, [onGenerated, options, videoFile, videoInfo]);
 
   const handleDownload = () => {
     if (!result) return;

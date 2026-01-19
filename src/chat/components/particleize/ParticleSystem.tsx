@@ -13,6 +13,7 @@ interface ParticleSystemProps {
   config: ParticleConfig;
   width: number;
   height: number;
+  onVideoExported?: (blob: Blob, filename: string) => void;
 }
 
 export interface ParticleSystemHandle {
@@ -32,7 +33,7 @@ function hexToRgb(hex: string) {
 }
 
 const ParticleSystem = forwardRef<ParticleSystemHandle, ParticleSystemProps>(
-  ({ imageSrc, config, width, height }, ref) => {
+  ({ imageSrc, config, width, height, onVideoExported }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const requestRef = useRef<number>(0);
     const particlesRef = useRef<Particle[]>([]);
@@ -73,9 +74,11 @@ const ParticleSystem = forwardRef<ParticleSystemHandle, ParticleSystemProps>(
           mediaRecorder.onstop = () => {
             const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
             const url = URL.createObjectURL(blob);
+            const filename = `lumina-animation-${Date.now()}.webm`;
+            onVideoExported?.(blob, filename);
             const link = document.createElement('a');
             link.href = url;
-            link.download = `lumina-animation-${Date.now()}.webm`;
+            link.download = filename;
             link.click();
             URL.revokeObjectURL(url);
           };
@@ -325,4 +328,3 @@ const ParticleSystem = forwardRef<ParticleSystemHandle, ParticleSystemProps>(
 );
 
 export default ParticleSystem;
-

@@ -4,8 +4,9 @@
  */
 
 const DB_NAME = 'GeminiFlowImages';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_NAME = 'images';
+const NODE_STORE_NAME = 'node_images';
 
 interface StoredImage {
   id: string;
@@ -15,6 +16,12 @@ interface StoredImage {
   timestamp: number;
   fileName: string;
 }
+
+type StoredNodeImages = {
+  nodeId: string;
+  images: string[];
+  updatedAt: number;
+};
 
 let db: IDBDatabase | null = null;
 
@@ -48,6 +55,11 @@ const initDB = (): Promise<IDBDatabase> => {
         store.createIndex('timestamp', 'timestamp', { unique: false });
         store.createIndex('modelName', 'modelName', { unique: false });
         console.log('[ImageStorage] Object store created');
+      }
+
+      if (!database.objectStoreNames.contains(NODE_STORE_NAME)) {
+        database.createObjectStore(NODE_STORE_NAME, { keyPath: 'nodeId' });
+        console.log('[ImageStorage] Node images store created');
       }
     };
   });
@@ -205,6 +217,62 @@ export const deleteImage = async (id: string): Promise<void> => {
     });
   } catch (error) {
     console.error('[ImageStorage] Delete error:', error);
+    throw error;
+  }
+};
+
+export const persistNodeImages = async (nodeId: string, images: string[]): Promise<void> => {
+  const normalized = Array.isArray(images) ? images.filter(Boolean) : [];
+  try {
+    const database = await initDB();
+    const record: StoredNodeImages = { nodeId, images: normalized, updatedAt: Date.now() };
+    return new Promise((resolve, reject) => {
+      const transaction = database.transaction([NODE_STORE_NAME], 'readwrite');
+      const store = transaction.objectStore(NODE_STORE_NAME);
+      const request = store.put(record);
+
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+  } catch (error) {
+    console.error('[ImageStorage] Persist node images error:', error);
+    throw error;
+  }
+};
+
+export const loadNodeImages = async (nodeId: string): Promise<string[]> => {
+  try {
+    const database = await initDB();
+    return new Promise((resolve, reject) => {
+      const transaction = database.transaction([NODE_STORE_NAME], 'readonly');
+      const store = transaction.objectStore(NODE_STORE_NAME);
+      const request = store.get(nodeId);
+
+      request.onsuccess = () => {
+        const record = request.result as StoredNodeImages | undefined;
+        resolve(Array.isArray(record?.images) ? record!.images.filter(Boolean) : []);
+      };
+
+      request.onerror = () => reject(request.error);
+    });
+  } catch (error) {
+    console.error('[ImageStorage] Load node images error:', error);
+    return [];
+  }
+};
+
+export const deleteNodeImages = async (nodeId: string): Promise<void> => {
+  try {
+    const database = await initDB();
+    return new Promise((resolve, reject) => {
+      const transaction = database.transaction([NODE_STORE_NAME], 'readwrite');
+      const store = transaction.objectStore(NODE_STORE_NAME);
+      const request = store.delete(nodeId);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+  } catch (error) {
+    console.error('[ImageStorage] Delete node images error:', error);
     throw error;
   }
 };

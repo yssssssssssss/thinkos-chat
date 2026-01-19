@@ -1522,7 +1522,7 @@ const Canvas: React.FC = () => {
 
   return (
 
-    <div className="w-screen h-screen overflow-hidden bg-white relative text-black font-sans">
+    <div className="w-full h-full overflow-hidden bg-white relative text-black font-sans">
 
       {/* Toolbar */}
 

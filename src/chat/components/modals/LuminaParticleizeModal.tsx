@@ -10,6 +10,7 @@ interface LuminaParticleizeModalProps {
   config: ParticleConfig;
   setConfig: React.Dispatch<React.SetStateAction<ParticleConfig>>;
   onClose: () => void;
+  onVideoExported?: (blob: Blob, filename: string) => void;
 }
 
 const LuminaParticleizeModal: React.FC<LuminaParticleizeModalProps> = ({
@@ -18,6 +19,7 @@ const LuminaParticleizeModal: React.FC<LuminaParticleizeModalProps> = ({
   config,
   setConfig,
   onClose,
+  onVideoExported,
 }) => {
   const particleSystemRef = useRef<ParticleSystemHandle>(null);
   const [dimensions, setDimensions] = useState({ width: window.innerWidth, height: window.innerHeight });
@@ -69,6 +71,7 @@ const LuminaParticleizeModal: React.FC<LuminaParticleizeModalProps> = ({
               config={config}
               width={dimensions.width - 320}
               height={dimensions.height}
+              onVideoExported={onVideoExported}
             />
           </div>
 
@@ -89,4 +92,3 @@ const LuminaParticleizeModal: React.FC<LuminaParticleizeModalProps> = ({
 };
 
 export default LuminaParticleizeModal;
-
