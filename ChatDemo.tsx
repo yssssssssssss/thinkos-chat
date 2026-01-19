@@ -138,7 +138,6 @@ const TOOL_BUTTONS = [
   { id: 'glass-mosaic', icon: Palette, label: 'GlassMosaic', color: 'text-indigo-500' },
   { id: 'png2apng', icon: FileImage, label: 'PNG→APNG', color: 'text-emerald-600' },
   { id: 'video2gif', icon: Film, label: 'Video→GIF', color: 'text-emerald-600' },
-  { id: 'more', icon: MoreHorizontal, label: '更多', color: 'text-gray-400' },
 ];
 
 // ========== 类型定义 ==========
@@ -777,9 +776,6 @@ const ChatDemo: React.FC = () => {
         break;
       case 'glass-mosaic':
         setActivePanel(activePanel === 'glassMosaic' ? 'none' : 'glassMosaic');
-        break;
-      case 'more':
-        setActivePanel(activePanel === 'moreTools' ? 'none' : 'moreTools');
         break;
       case 'png2apng':
         setEmbeddedTool('png2apng');

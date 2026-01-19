@@ -6,7 +6,7 @@
 ## 模块概述
 - **职责:** 会话列表与选中、消息渲染、输入/发送、多模型结果展示、工具面板与弹窗。
 - **状态:** ?稳定
-- **最后更新:** 2026-01-15
+- **最后更新:** 2026-01-17
 
 ## 规范
 
@@ -27,6 +27,11 @@
 - 路径：输入 `/web`（可携带文本）或点击输入栏工具栏的 `Web` 按钮 → 选择“小红书封面” → 选择模板与生成模式 → 生成。
 - 结果：JSON prompts 写入对话（`textResponses`）；如选择生图，将图片写入对话（`imageResponses`），并将第 1 张设为 `referenceImage`。
 
+### 需求: 粒子化（Lumina Particleize）
+- 路径：输入栏工具栏 → `粒子化` → 弹窗内进行上传/AI 生成、参数调节与导出。
+- 初始图像：若当前对话已有 `referenceImage`，首次打开弹窗会默认使用它作为粒子化输入图像。
+- 导出：支持导出 PNG 静帧与透明 WebM 录制（按“录制时长”参数）。
+
 ## 依赖
 - `services/*`
 - `utils/*`
@@ -37,3 +42,4 @@
 - [202601141737_ai_image_expand](../../history/2026-01/202601141737_ai_image_expand/) - 新增 AI 图片扩展（Gemini 3 Pro），支持 `size` 参数扩展背景
 - [202601141617_embed_tools](../../history/2026-01/202601141617_embed_tools/) - 输入栏增加工具入口（PNG→APNG / Video→GIF）
 - [202601141747_embed_tools_modal](../../history/2026-01/202601141747_embed_tools_modal/) - 工具入口改为弹窗内嵌打开（不跳转页面）
+- [202601171800_lumina_particleize_modal](../../history/2026-01/202601171800_lumina_particleize_modal/) - Lumina 粒子化工具弹窗入口（并移除“更多”按钮）

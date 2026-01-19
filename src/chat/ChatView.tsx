@@ -9,7 +9,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   Sparkles, Bot, ChevronDown, Menu, X, Settings,
-  MessageSquare, Image, Search, FileText, Palette, MoreHorizontal, FileImage, Film, Globe
+  MessageSquare, Image, Search, FileText, Palette, FileImage, Film, Globe, Wand2
 } from 'lucide-react';
 
 // 导入服务
@@ -53,6 +53,8 @@ import { WebToolsDialog } from './components/dialogs/WebToolsDialog';
 import { ImageEditModal } from './components/modals/ImageEditModal';
 import { Png2ApngModal } from './components/modals/Png2ApngModal';
 import { Video2GifModal } from './components/modals/Video2GifModal';
+import LuminaParticleizeModal from './components/modals/LuminaParticleizeModal';
+import { DEFAULT_LUMINA_PARTICLEIZE_CONFIG, DEFAULT_LUMINA_PARTICLEIZE_IMAGE_SRC } from './components/particleize/defaults';
 
 // 导入类型
 import { TabType, ModeType, PanelType, ModelOption, ToolButton } from './types';
@@ -136,12 +138,12 @@ const TOOL_BUTTONS: ToolButton[] = [
   { id: 'image-gen', icon: Image, label: '图像生成', color: 'text-pink-500' },
   { id: 'web', icon: Globe, label: 'Web', color: 'text-teal-600' },
   { id: 'ai-image-expand', icon: Sparkles, label: 'AI图片扩展', color: 'text-purple-500' },
+  { id: 'lumina-particleize', icon: Wand2, label: '粒子化', color: 'text-cyan-500' },
   { id: 'prompt-market', icon: Search, label: 'PromptMarket', color: 'text-orange-500' },
   { id: 'system-prompt', icon: FileText, label: 'SystemPrompt', color: 'text-purple-500' },
   { id: 'glass-mosaic', icon: Palette, label: 'GlassMosaic', color: 'text-indigo-500' },
   { id: 'png2apng', icon: FileImage, label: 'PNG→APNG', color: 'text-emerald-600' },
   { id: 'video2gif', icon: Film, label: 'Video→GIF', color: 'text-emerald-600' },
-  { id: 'more', icon: MoreHorizontal, label: '更多', color: 'text-gray-400' },
 ];
 
 
@@ -188,6 +190,11 @@ export const ChatView: React.FC = () => {
 
   // 内嵌工具弹窗
   const [embeddedTool, setEmbeddedTool] = useState<'none' | 'png2apng' | 'video2gif'>('none');
+
+  // Lumina 粒子化弹窗
+  const [particleizeOpen, setParticleizeOpen] = useState(false);
+  const [particleizeImageSrc, setParticleizeImageSrc] = useState<string | null>(null);
+  const [particleizeConfig, setParticleizeConfig] = useState(DEFAULT_LUMINA_PARTICLEIZE_CONFIG);
 
   // Agent 状态和功能
   const {
@@ -625,8 +632,10 @@ export const ChatView: React.FC = () => {
       case 'glass-mosaic':
         setActivePanel(activePanel === 'glassMosaic' ? 'none' : 'glassMosaic');
         break;
-      case 'more':
-        setActivePanel(activePanel === 'moreTools' ? 'none' : 'moreTools');
+      case 'lumina-particleize':
+        setActivePanel('none');
+        setParticleizeImageSrc((prev) => prev ?? referenceImage ?? DEFAULT_LUMINA_PARTICLEIZE_IMAGE_SRC);
+        setParticleizeOpen(true);
         break;
       case 'png2apng':
         setEmbeddedTool('png2apng');
@@ -1021,6 +1030,16 @@ export const ChatView: React.FC = () => {
       {/* 内嵌工具弹窗 */}
       {embeddedTool === 'png2apng' && <Png2ApngModal onClose={() => setEmbeddedTool('none')} />}
       {embeddedTool === 'video2gif' && <Video2GifModal onClose={() => setEmbeddedTool('none')} />}
+
+      {particleizeOpen && (
+        <LuminaParticleizeModal
+          imageSrc={particleizeImageSrc}
+          setImageSrc={setParticleizeImageSrc}
+          config={particleizeConfig}
+          setConfig={setParticleizeConfig}
+          onClose={() => setParticleizeOpen(false)}
+        />
+      )}
     </div>
   );
 };
