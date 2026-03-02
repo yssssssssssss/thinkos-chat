@@ -9,7 +9,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   Sparkles, Bot, ChevronDown, Settings, Plus,
-  MessageSquare, Image, Search, FileText, Palette, FileImage, Film, Globe, Wand2
+  MessageSquare, Image, Search, FileText, Palette, FileImage, Film, Globe, Wand2, Video
 } from 'lucide-react';
 
 // 导入服务
@@ -54,11 +54,13 @@ import { Png2ApngModal } from './components/modals/Png2ApngModal';
 import { Video2GifModal } from './components/modals/Video2GifModal';
 import LuminaParticleizeModal from './components/modals/LuminaParticleizeModal';
 import RecentConversationsModal from './components/modals/RecentConversationsModal';
+import { VideoGenModal } from './components/modals/VideoGenModal';
 import { DEFAULT_LUMINA_PARTICLEIZE_CONFIG, DEFAULT_LUMINA_PARTICLEIZE_IMAGE_SRC } from './components/particleize/defaults';
 
 // 导入类型
 import { TabType, ModeType, PanelType, ModelOption, ToolButton } from './types';
 import type { ConversationImageAsset } from '../board/types';
+import type { VideoGenerationResult } from './videoTypes';
 import { useWorkspace } from '../workspace/WorkspaceContext';
 
 // 图像处理工具函数
@@ -133,6 +135,7 @@ const IMAGE_MODELS: ModelOption[] = [
   { id: 'Gemini 3-Pro-Image-Preview', name: 'Gemini 3 Pro', selected: true },
   { id: 'Gemini-2.5-flash-image-preview', name: 'Gemini 2.5 Flash', selected: false },
   { id: 'doubao-seedream-4-0-250828', name: '即梦 4.0', selected: false },
+  { id: 'doubao-seedream-4-5-251128', name: '即梦 4.5', selected: false },
 ];
 
 const TOOL_BUTTONS: ToolButton[] = [
@@ -146,6 +149,7 @@ const TOOL_BUTTONS: ToolButton[] = [
   { id: 'glass-mosaic', icon: Palette, label: 'GlassMosaic', color: 'text-indigo-500' },
   { id: 'png2apng', icon: FileImage, label: 'PNG→APNG', color: 'text-emerald-600' },
   { id: 'video2gif', icon: Film, label: 'Video→GIF', color: 'text-emerald-600' },
+  { id: 'video-gen', icon: Video, label: '视频生成', color: 'text-violet-500' },
 ];
 
 
@@ -192,6 +196,9 @@ export const ChatView: React.FC = () => {
 
   // 内嵌工具弹窗
   const [embeddedTool, setEmbeddedTool] = useState<'none' | 'png2apng' | 'video2gif'>('none');
+
+  // 视频生成弹窗
+  const [videoGenOpen, setVideoGenOpen] = useState(false);
 
   // Lumina 粒子化弹窗
   const [particleizeOpen, setParticleizeOpen] = useState(false);
@@ -693,6 +700,10 @@ export const ChatView: React.FC = () => {
         setEmbeddedTool('video2gif');
         setActivePanel('none');
         break;
+      case 'video-gen':
+        setActivePanel('none');
+        setVideoGenOpen(true);
+        break;
     }
   };
 
@@ -1132,6 +1143,48 @@ export const ChatView: React.FC = () => {
           onClose={() => setParticleizeOpen(false)}
           onVideoExported={(blob, filename) => {
             void board.addBlobItem({ kind: 'video', blob, filename, meta: { source: 'particleize' } });
+          }}
+        />
+      )}
+
+      {/* 视频生成弹窗 */}
+      {videoGenOpen && (
+        <VideoGenModal
+          onClose={() => setVideoGenOpen(false)}
+          onGenerated={(result: VideoGenerationResult) => {
+            log.info('ChatView', '视频生成完成', { generatorId: result.generatorId, videoUrl: result.videoUrl.slice(0, 100) });
+
+            // 将视频结果添加到对话历史
+            let conversationId = selectedConversation;
+            if (!conversationId) {
+              const newConv = createConversation(`视频生成 - ${result.generatorTitle}`);
+              conversationId = newConv.id;
+              setSelectedConversation(conversationId);
+              refreshConversations();
+            }
+
+            addMessage(conversationId, {
+              role: 'user',
+              content: `[视频生成] ${result.generatorTitle}\n${result.prompt}`,
+            });
+
+            addMessage(conversationId, {
+              role: 'assistant',
+              content: `视频生成完成！\n\n🎬 模型: ${result.generatorTitle}\n📝 Prompt: ${result.prompt}\n🔗 [点击查看视频](${result.videoUrl})`,
+              imageResponses: [{
+                modelId: `video-gen-${result.generatorId}`,
+                modelName: result.generatorTitle,
+                imageUrl: result.videoUrl,
+                prompt: result.prompt,
+                status: 'complete' as const,
+              }],
+            });
+
+            refreshConversations();
+            const updatedConv = getConversation(conversationId);
+            setCurrentConversation(updatedConv);
+
+            setVideoGenOpen(false);
           }}
         />
       )}

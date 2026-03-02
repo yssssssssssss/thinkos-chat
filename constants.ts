@@ -19,6 +19,12 @@ export const AVAILABLE_IMAGE_MODELS: ModelOption[] = [
     selected: false,
     systemPrompt: 'Generate creative images with Chinese prompt understanding.'
   },
+  {
+    id: 'doubao-seedream-4-5-251128',
+    name: '即梦4.5',
+    selected: false,
+    systemPrompt: 'Generate high-quality creative images with advanced Chinese prompt understanding.'
+  },
 ];
 
 export const AVAILABLE_IMAGE_TO_IMAGE_MODELS: ModelOption[] = [
@@ -39,6 +45,12 @@ export const AVAILABLE_IMAGE_TO_IMAGE_MODELS: ModelOption[] = [
     name: '即梦4.0',
     selected: false,
     systemPrompt: 'Edit the input image with strong Chinese prompt understanding.'
+  },
+  {
+    id: 'doubao-seedream-4-5-251128',
+    name: '即梦4.5',
+    selected: false,
+    systemPrompt: 'Edit the input image with advanced Chinese prompt understanding and higher quality.'
   },
 ];
 

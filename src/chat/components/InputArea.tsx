@@ -78,7 +78,7 @@ export const InputArea: React.FC<InputAreaProps> = ({
     <div className="p-4 pb-6">
       <div className="max-w-3xl mx-auto relative">
         {children}
-        
+
         {/* 离线提示 */}
         {!isOnline && (
           <div className="mb-3 px-4 py-2 bg-amber-50 border border-amber-200 rounded-2xl flex items-center gap-2 text-amber-700">
@@ -86,7 +86,36 @@ export const InputArea: React.FC<InputAreaProps> = ({
             <span className="text-sm">网络已断开，请检查网络连接</span>
           </div>
         )}
-        
+
+        {/* 核心功能进入点 */}
+        <div className="flex gap-3 mb-4">
+          {toolButtons.filter(t => ['text-chat', 'image-gen', 'video-gen'].includes(t.id)).map((tool) => {
+            const isActive = (tool.id === 'text-chat' && activeMode === 'text' && activePanel === 'none') ||
+              (tool.id === 'image-gen' && activeMode === 'image' && activePanel === 'none');
+
+            return (
+              <button
+                key={tool.id}
+                onClick={() => onToolClick(tool.id)}
+                className={`flex-1 flex items-center justify-center gap-2.5 py-3 px-4 rounded-2xl border transition-all duration-300 shadow-sm hover:shadow-md ${isActive
+                    ? `bg-white border-white ring-2 ring-offset-2 ring-opacity-50 ring-offset-gray-50 ${tool.id === 'text-chat' ? 'ring-blue-400 border-blue-100 shadow-blue-100' :
+                      tool.id === 'image-gen' ? 'ring-pink-400 border-pink-100 shadow-pink-100' :
+                        'ring-violet-400 border-violet-100 shadow-violet-100'
+                    }`
+                    : 'bg-white/60 backdrop-blur-md border-white/40 hover:bg-white text-gray-600'
+                  }`}
+              >
+                <div className={`p-1.5 rounded-lg ${isActive ? tool.color.replace('text-', 'bg-').replace('-500', '-50') : 'bg-gray-100/50'}`}>
+                  <tool.icon className={`w-5 h-5 ${tool.color}`} />
+                </div>
+                <span className={`text-[15px] font-semibold ${isActive ? 'text-gray-900' : 'text-gray-500'}`}>
+                  {tool.label}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
         {/* 主输入框 */}
         <div className="bg-white rounded-3xl shadow-lg shadow-gray-200/50 border border-gray-100 overflow-hidden">
           {/* 参考图预览 */}
@@ -94,7 +123,7 @@ export const InputArea: React.FC<InputAreaProps> = ({
             <div className="px-4 pt-4 flex items-center gap-3">
               <div className="relative group">
                 <img src={referenceImage} alt="Reference" className="w-16 h-16 object-cover rounded-xl border border-gray-100" />
-                <button onClick={onRemoveReference} 
+                <button onClick={onRemoveReference}
                   className="absolute -top-2 -right-2 p-1 bg-gray-900 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
                   <span className="text-xs">×</span>
                 </button>
@@ -102,11 +131,11 @@ export const InputArea: React.FC<InputAreaProps> = ({
               <span className="text-sm text-gray-500">参考图已添加</span>
             </div>
           )}
-          
+
           {/* 输入框 */}
           <div className="px-5 py-4">
-            <textarea 
-              value={inputText} 
+            <textarea
+              value={inputText}
               onChange={(e) => onInputChange(e.target.value)}
               onFocus={handleInputFocus}
               placeholder='发消息或输入 "/" 选择技能'
@@ -115,7 +144,7 @@ export const InputArea: React.FC<InputAreaProps> = ({
               onKeyDown={handleKeyDown}
             />
           </div>
-          
+
           {/* 底部工具栏 */}
           <div className="px-4 pb-4 flex items-center justify-between">
             <div className="flex items-center gap-1">
@@ -124,31 +153,28 @@ export const InputArea: React.FC<InputAreaProps> = ({
                 <Paperclip className="w-5 h-5 text-gray-400" />
                 <input type="file" className="hidden" accept="image/*" onChange={handleFileChange} />
               </label>
-              
+
               {/* URL 输入 */}
-              <button 
+              <button
                 onClick={handleUrlClick}
                 className="p-2 hover:bg-gray-100 rounded-xl transition-colors"
                 title="从 URL 添加图片"
               >
                 <Link className="w-5 h-5 text-gray-400" />
               </button>
-              
+
               <div className="w-px h-5 bg-gray-200 mx-1" />
-              
-              {/* 工具按钮 */}
-              {toolButtons.map((tool: ToolButton) => (
-                <button 
-                  key={tool.id} 
+
+              {/* 工具按钮 (Filtered secondary tools) */}
+              {toolButtons.filter(t => !['text-chat', 'image-gen', 'video-gen'].includes(t.id)).map((tool: ToolButton) => (
+                <button
+                  key={tool.id}
                   onClick={() => onToolClick(tool.id)}
-                  className={`relative group p-2 rounded-xl transition-all hover:bg-gray-100 ${
-                    (tool.id === 'text-chat' && activeMode === 'text') ||
-                    (tool.id === 'image-gen' && activeMode === 'image') ||
-                    (tool.id === 'prompt-market' && activePanel === 'promptMarket') ||
-                    (tool.id === 'system-prompt' && activePanel === 'systemPrompt') ||
-                    (tool.id === 'glass-mosaic' && activePanel === 'glassMosaic')
+                  className={`relative group p-2 rounded-xl transition-all hover:bg-gray-100 ${(tool.id === 'prompt-market' && activePanel === 'promptMarket') ||
+                      (tool.id === 'system-prompt' && activePanel === 'systemPrompt') ||
+                      (tool.id === 'glass-mosaic' && activePanel === 'glassMosaic')
                       ? 'bg-gray-100' : ''
-                  }`}
+                    }`}
                 >
                   <tool.icon className={`w-5 h-5 ${tool.color}`} />
                   {/* Tooltip */}
@@ -165,11 +191,10 @@ export const InputArea: React.FC<InputAreaProps> = ({
                 onClick={onAgentInput}
                 disabled={!inputText.trim() || isAgentExecuting || isGenerating || !isOnline}
                 title="AI 智能处理（需要参考图片）"
-                className={`p-2.5 rounded-xl transition-all ${
-                  inputText.trim() && !isAgentExecuting && !isGenerating && isOnline
+                className={`p-2.5 rounded-xl transition-all ${inputText.trim() && !isAgentExecuting && !isGenerating && isOnline
                     ? 'bg-purple-500 text-white shadow-lg shadow-purple-500/30 hover:bg-purple-600'
                     : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                }`}
+                  }`}
               >
                 {isAgentExecuting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
               </button>
@@ -177,16 +202,15 @@ export const InputArea: React.FC<InputAreaProps> = ({
 
             {/* 发送按钮 */}
             <button onClick={onSend} disabled={!inputText.trim() || isGenerating || !isOnline}
-              className={`p-2.5 rounded-xl transition-all ${
-                inputText.trim() && !isGenerating && isOnline
+              className={`p-2.5 rounded-xl transition-all ${inputText.trim() && !isGenerating && isOnline
                   ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30 hover:bg-blue-600'
                   : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-              }`}>
+                }`}>
               {isGenerating ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
             </button>
           </div>
         </div>
-        
+
         <p className="text-center text-xs text-gray-400 mt-3">
           {activeMode === 'image' ? `图像模式 · ${selectedImageCount} 个模型` : `文本模式 · ${selectedTextCount} 个模型`} · 按 Enter 发送
         </p>

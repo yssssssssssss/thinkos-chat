@@ -1,26 +1,26 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { 
-  MessageSquare, Plus, Send, Settings, ChevronDown, Menu, X, Sparkles, 
-  Image, Check, Loader2, Copy, RotateCcw, Download, Edit2, Sliders, 
-  Wand2, Search, BookOpen, Palette, FileText, Upload, Paperclip, 
+import {
+  MessageSquare, Plus, Send, Settings, ChevronDown, Menu, X, Sparkles,
+  Image, Check, Loader2, Copy, RotateCcw, Download, Edit2, Sliders,
+  Wand2, Search, BookOpen, Palette, FileText, Upload, Paperclip,
   MoreHorizontal, Bot, Zap, AlertCircle, Link, Trash2, FileImage, Film
 } from 'lucide-react';
-import { 
-  generateTextMultiModel, 
+import {
+  generateTextMultiModel,
   generateImageMultiModel,
   retryTextModel,
   retryImageModel,
-  TextModelResponse, 
-  ImageModelResponse 
+  TextModelResponse,
+  ImageModelResponse
 } from './services/multiModelService';
 import { getSystemPrompts, SystemPromptPreset } from './services/systemPromptService';
 import { getPromptMarks, PromptMarkPreset } from './services/promptMarkService';
 import { editImageWithGeminiFlash, editImageWithSeedream } from './services/geminiImageService';
 import { chatCompletionsStream } from './services/textModelService';
-import { 
-  getConversationList, 
-  getConversation, 
-  createConversation, 
+import {
+  getConversationList,
+  getConversation,
+  createConversation,
   deleteConversation,
   addMessage,
   Conversation
@@ -51,10 +51,10 @@ const isValidImageUrl = (url: string): boolean => {
   if (!trimmed) return false;
   // HTTP/HTTPS URL
   if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-    return /\.(jpg|jpeg|png|gif|webp|bmp|svg)(\?.*)?$/i.test(trimmed) || 
-           trimmed.includes('/image') || 
-           trimmed.includes('unsplash') ||
-           trimmed.includes('imgur');
+    return /\.(jpg|jpeg|png|gif|webp|bmp|svg)(\?.*)?$/i.test(trimmed) ||
+      trimmed.includes('/image') ||
+      trimmed.includes('unsplash') ||
+      trimmed.includes('imgur');
   }
   // Base64 data URL
   if (trimmed.startsWith('data:image/')) {
@@ -69,7 +69,7 @@ const urlToBase64 = async (url: string): Promise<string> => {
   if (url.startsWith('data:image/')) {
     return url;
   }
-  
+
   try {
     const response = await fetch(url);
     const blob = await response.blob();
@@ -89,7 +89,7 @@ const urlToBase64 = async (url: string): Promise<string> => {
 // 处理图像：转换为 Base64 并压缩
 const processImage = async (source: string | File): Promise<string> => {
   let base64: string;
-  
+
   if (source instanceof File) {
     base64 = await fileToBase64(source);
   } else if (source.startsWith('http')) {
@@ -97,7 +97,7 @@ const processImage = async (source: string | File): Promise<string> => {
   } else {
     base64 = source;
   }
-  
+
   // 压缩图像（最大边 1600px）
   return compressImage(base64, 1600, 0.85);
 };
@@ -115,6 +115,7 @@ const IMAGE_MODELS = [
   { id: 'Gemini 3-Pro-Image-Preview', name: 'Gemini 3 Pro', selected: true },
   { id: 'Gemini-2.5-flash-image-preview', name: 'Gemini 2.5 Flash', selected: false },
   { id: 'doubao-seedream-4-0-250828', name: '即梦 4.0', selected: false },
+  { id: 'doubao-seedream-4-5-251128', name: '即梦 4.5', selected: false },
 ];
 
 const SYSTEM_PROMPTS_FALLBACK = [
@@ -151,12 +152,12 @@ const ChatDemo: React.FC = () => {
   const [activeMode, setActiveMode] = useState<ModeType>('text');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [inputText, setInputText] = useState('');
-  
+
   // 对话管理状态
   const [conversations, setConversations] = useState<Array<{ id: string; title: string; time: string }>>([]);
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
   const [currentConversation, setCurrentConversation] = useState<Conversation | null>(null);
-  
+
   const [textModels, setTextModels] = useState(TEXT_MODELS);
   const [imageModels, setImageModels] = useState(IMAGE_MODELS);
   const [selectedPromptId, setSelectedPromptId] = useState('default');
@@ -166,7 +167,7 @@ const ChatDemo: React.FC = () => {
   const [selectedResultImage, setSelectedResultImage] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [showResults, setShowResults] = useState(false);
-  
+
   // 多模型响应状态
   const [textResponses, setTextResponses] = useState<TextModelResponse[]>([]);
   const [imageResponses, setImageResponses] = useState<ImageModelResponse[]>([]);
@@ -176,7 +177,7 @@ const ChatDemo: React.FC = () => {
   const [systemPrompts, setSystemPrompts] = useState<SystemPromptPreset[]>(SYSTEM_PROMPTS_FALLBACK);
   const [promptMarks, setPromptMarks] = useState<PromptMarkPreset[]>([]);
   const [promptMarksLoading, setPromptMarksLoading] = useState(false);
-  
+
   // PromptMarket 搜索和筛选
   const [promptSearchQuery, setPromptSearchQuery] = useState('');
   const [promptCategory, setPromptCategory] = useState('全部');
@@ -186,14 +187,14 @@ const ChatDemo: React.FC = () => {
   const [inpaintMask, setInpaintMask] = useState<string>('');
   const [inpaintInstruction, setInpaintInstruction] = useState('');
   const [isInpainting, setIsInpainting] = useState(false);
-  
+
   // Remix 状态
   const [remixReferenceImage, setRemixReferenceImage] = useState<string | null>(null);
   const [remixOriginalMask, setRemixOriginalMask] = useState<string>('');
   const [remixReferenceMask, setRemixReferenceMask] = useState<string>('');
   const [remixInstruction, setRemixInstruction] = useState('');
   const [isRemixing, setIsRemixing] = useState(false);
-  
+
   // Refine 状态
   const [refinePrompt, setRefinePrompt] = useState('');
   const [refineSuggestions, setRefineSuggestions] = useState<string[]>([]);
@@ -227,10 +228,10 @@ const ChatDemo: React.FC = () => {
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
-    
+
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
-    
+
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
@@ -313,13 +314,13 @@ const ChatDemo: React.FC = () => {
 
   // 过滤 PromptMarks
   const filteredPromptMarks = promptMarks.filter(pm => {
-    const matchesSearch = !promptSearchQuery || 
+    const matchesSearch = !promptSearchQuery ||
       pm.title.toLowerCase().includes(promptSearchQuery.toLowerCase()) ||
       (pm.summary || '').toLowerCase().includes(promptSearchQuery.toLowerCase()) ||
       pm.prompt.toLowerCase().includes(promptSearchQuery.toLowerCase());
-    
+
     const matchesCategory = promptCategory === '全部' || pm.category === promptCategory;
-    
+
     return matchesSearch && matchesCategory;
   });
 
@@ -342,17 +343,17 @@ const ChatDemo: React.FC = () => {
 
   const handleSend = async () => {
     if (!inputText.trim()) return;
-    
+
     const prompt = inputText.trim();
     setLastPrompt(prompt);
     setIsGenerating(true);
     setShowResults(true);
     setInputText('');
 
-    log.info('ChatDemo', `开始发送消息 [${activeMode}模式]`, { 
-      prompt: prompt.slice(0, 100), 
+    log.info('ChatDemo', `开始发送消息 [${activeMode}模式]`, {
+      prompt: prompt.slice(0, 100),
       hasReference: !!referenceImage,
-      hasKnowledge: !!knowledgeContext 
+      hasKnowledge: !!knowledgeContext
     });
 
     // 如果没有选中对话，创建新对话
@@ -389,7 +390,7 @@ const ChatDemo: React.FC = () => {
       log.info('ChatDemo', `开始文本生成`, { models: selectedModels.map(m => m.name) });
 
       // 如果有知识库上下文，将其添加到提示词前面
-      const finalPrompt = knowledgeContext 
+      const finalPrompt = knowledgeContext
         ? `[上下文知识]\n${knowledgeContext}\n\n[用户问题]\n${prompt}`
         : prompt;
 
@@ -402,9 +403,9 @@ const ChatDemo: React.FC = () => {
           // 检查是否所有模型都完成
           const allDone = responses.every(r => r.status === 'complete' || r.status === 'error');
           if (allDone) {
-            log.info('ChatDemo', '文本生成完成', { 
+            log.info('ChatDemo', '文本生成完成', {
               completed: responses.filter(r => r.status === 'complete').length,
-              errors: responses.filter(r => r.status === 'error').length 
+              errors: responses.filter(r => r.status === 'error').length
             });
             setIsGenerating(false);
             // 保存 AI 响应
@@ -438,9 +439,9 @@ const ChatDemo: React.FC = () => {
         return;
       }
 
-      log.info('ChatDemo', `开始图像生成`, { 
+      log.info('ChatDemo', `开始图像生成`, {
         models: selectedModels.map(m => m.name),
-        hasInputImage: !!referenceImage 
+        hasInputImage: !!referenceImage
       });
 
       await generateImageMultiModel({
@@ -452,12 +453,12 @@ const ChatDemo: React.FC = () => {
           // 检查是否所有模型都完成
           const allDone = responses.every(r => r.status === 'complete' || r.status === 'error');
           if (allDone) {
-            log.info('ChatDemo', '图像生成完成', { 
+            log.info('ChatDemo', '图像生成完成', {
               completed: responses.filter(r => r.status === 'complete').length,
-              errors: responses.filter(r => r.status === 'error').length 
+              errors: responses.filter(r => r.status === 'error').length
             });
             setIsGenerating(false);
-            
+
             // 保存成功生成的图像到本地
             const successfulImages = responses
               .filter(r => r.status === 'complete' && r.image?.url)
@@ -466,23 +467,23 @@ const ChatDemo: React.FC = () => {
                 modelName: r.modelName,
                 prompt: prompt
               }));
-            
+
             if (successfulImages.length > 0) {
               log.info('ChatDemo', `准备保存 ${successfulImages.length} 张图像到本地`);
               // 异步保存图像，不阻塞 UI
               Promise.all(
-                successfulImages.map(img => 
+                successfulImages.map(img =>
                   saveImageToLocal(img.url, img.modelName, img.prompt)
                     .catch(err => log.error('ChatDemo', '保存图像失败', err))
                 )
               );
             }
-            
+
             // 保存 AI 响应到对话历史
             if (conversationId) {
-              log.debug('ChatDemo', '保存图像响应到对话', { 
+              log.debug('ChatDemo', '保存图像响应到对话', {
                 conversationId,
-                imageCount: responses.length 
+                imageCount: responses.length
               });
               addMessage(conversationId, {
                 role: 'assistant',
@@ -508,9 +509,9 @@ const ChatDemo: React.FC = () => {
   // 重试单个文本模型
   const handleRetryTextModel = async (modelId: string, modelName: string) => {
     if (!lastPrompt) return;
-    
+
     // 更新该模型状态为 streaming
-    setTextResponses(prev => prev.map(r => 
+    setTextResponses(prev => prev.map(r =>
       r.modelId === modelId ? { ...r, status: 'streaming' as const, content: '', error: undefined } : r
     ));
 
@@ -520,7 +521,7 @@ const ChatDemo: React.FC = () => {
       lastPrompt,
       getSelectedSystemPrompt(),
       (response) => {
-        setTextResponses(prev => prev.map(r => 
+        setTextResponses(prev => prev.map(r =>
           r.modelId === modelId ? response : r
         ));
       }
@@ -530,9 +531,9 @@ const ChatDemo: React.FC = () => {
   // 重试单个图像模型
   const handleRetryImageModel = async (modelId: string, modelName: string) => {
     if (!lastPrompt) return;
-    
+
     // 更新该模型状态为 streaming
-    setImageResponses(prev => prev.map(r => 
+    setImageResponses(prev => prev.map(r =>
       r.modelId === modelId ? { ...r, status: 'streaming' as const, image: undefined, error: undefined } : r
     ));
 
@@ -542,7 +543,7 @@ const ChatDemo: React.FC = () => {
       lastPrompt,
       referenceImage,
       (response) => {
-        setImageResponses(prev => prev.map(r => 
+        setImageResponses(prev => prev.map(r =>
           r.modelId === modelId ? response : r
         ));
       }
@@ -572,7 +573,7 @@ const ChatDemo: React.FC = () => {
   const openImageEditor = (imageUrl: string, panel: 'inpaint' | 'remix' | 'refine') => {
     setEditingImage(imageUrl);
     setActivePanel(panel);
-    
+
     if (panel === 'inpaint') {
       setInpaintMask('');
       setInpaintInstruction('');
@@ -591,7 +592,7 @@ const ChatDemo: React.FC = () => {
   // Inpaint 处理
   const handleInpaint = async () => {
     if (!editingImage || !inpaintMask || !inpaintInstruction.trim()) return;
-    
+
     setIsInpainting(true);
     try {
       const result = await editImageWithGeminiFlash(
@@ -599,7 +600,7 @@ const ChatDemo: React.FC = () => {
         inpaintMask,
         inpaintInstruction
       );
-      
+
       // 将结果添加到图像响应中
       setImageResponses(prev => [{
         modelId: 'inpaint-result',
@@ -612,7 +613,7 @@ const ChatDemo: React.FC = () => {
           model: 'Gemini Flash Inpaint'
         }
       }, ...prev]);
-      
+
       setActivePanel('none');
       setShowResults(true);
     } catch (error) {
@@ -625,7 +626,7 @@ const ChatDemo: React.FC = () => {
   // Remix 处理
   const handleRemix = async () => {
     if (!editingImage || !remixReferenceImage || !remixInstruction.trim()) return;
-    
+
     setIsRemixing(true);
     try {
       const result = await editImageWithSeedream({
@@ -636,7 +637,7 @@ const ChatDemo: React.FC = () => {
         referenceMask: remixReferenceMask || undefined,
         mode: 'remix'
       });
-      
+
       // 将结果添加到图像响应中
       setImageResponses(prev => [{
         modelId: 'remix-result',
@@ -649,7 +650,7 @@ const ChatDemo: React.FC = () => {
           model: 'Seedream Remix'
         }
       }, ...prev]);
-      
+
       setActivePanel('none');
       setShowResults(true);
     } catch (error) {
@@ -662,10 +663,10 @@ const ChatDemo: React.FC = () => {
   // Refine 处理 - 生成优化建议
   const handleGenerateRefineSuggestions = async () => {
     if (!refinePrompt.trim()) return;
-    
+
     setIsRefining(true);
     setRefineSuggestions([]);
-    
+
     try {
       const systemPrompt = `你是一个专业的 AI 图像生成提示词优化专家。用户会给你一个提示词，请生成 3 个优化后的版本。
 每个优化版本应该：
@@ -686,7 +687,7 @@ const ChatDemo: React.FC = () => {
           fullText = text;
         }
       );
-      
+
       // 解析建议
       const suggestions = fullText.split('---').map(s => s.trim()).filter(s => s.length > 0);
       setRefineSuggestions(suggestions);
@@ -700,10 +701,10 @@ const ChatDemo: React.FC = () => {
   // 使用选中的优化建议重新生成
   const handleApplyRefineSuggestions = async () => {
     if (selectedRefineSuggestions.length === 0) return;
-    
+
     const selectedPrompts = selectedRefineSuggestions.map(i => refineSuggestions[i]);
     const combinedPrompt = selectedPrompts.join('\n\n');
-    
+
     setInputText(combinedPrompt);
     setActivePanel('none');
   };
@@ -717,7 +718,7 @@ const ChatDemo: React.FC = () => {
 
   const processGlassMosaic = async () => {
     if (!glassMosaicImage || !glassMosaicCanvasRef.current) return;
-    
+
     setIsProcessingMosaic(true);
     try {
       const img = await loadImageElement(glassMosaicImage);
@@ -798,16 +799,14 @@ const ChatDemo: React.FC = () => {
         <span className="font-semibold text-lg text-gray-800">GeminiFlow</span>
       </div>
       <nav className="flex gap-1">
-        <button onClick={() => setActiveTab('chat')} 
-          className={`px-5 py-2 rounded-full text-sm font-medium transition-all ${
-            activeTab === 'chat' ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-100'
-          }`}>
+        <button onClick={() => setActiveTab('chat')}
+          className={`px-5 py-2 rounded-full text-sm font-medium transition-all ${activeTab === 'chat' ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-100'
+            }`}>
           AI 对话
         </button>
-        <button onClick={() => setActiveTab('canvas')} 
-          className={`px-5 py-2 rounded-full text-sm font-medium transition-all ${
-            activeTab === 'canvas' ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-100'
-          }`}>
+        <button onClick={() => setActiveTab('canvas')}
+          className={`px-5 py-2 rounded-full text-sm font-medium transition-all ${activeTab === 'canvas' ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-100'
+            }`}>
           Canvas
         </button>
       </nav>
@@ -826,7 +825,7 @@ const ChatDemo: React.FC = () => {
   const renderSidebar = () => (
     <aside className={`${sidebarOpen ? 'w-72' : 'w-0'} bg-gray-50/50 border-r border-gray-100 flex flex-col transition-all duration-300 overflow-hidden shrink-0`}>
       <div className="p-4">
-        <button 
+        <button
           onClick={handleNewConversation}
           className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-500 text-white rounded-2xl hover:bg-blue-600 transition-all shadow-lg shadow-blue-500/25 font-medium"
         >
@@ -843,11 +842,10 @@ const ChatDemo: React.FC = () => {
         ) : (
           conversations.map((conv) => (
             <div key={conv.id} className="group relative">
-              <button 
+              <button
                 onClick={() => setSelectedConversation(conv.id)}
-                className={`w-full text-left px-4 py-3 rounded-xl mb-1 transition-all ${
-                  selectedConversation === conv.id ? 'bg-white shadow-sm border border-gray-100' : 'hover:bg-white/60'
-                }`}
+                className={`w-full text-left px-4 py-3 rounded-xl mb-1 transition-all ${selectedConversation === conv.id ? 'bg-white shadow-sm border border-gray-100' : 'hover:bg-white/60'
+                  }`}
               >
                 <div className="flex items-center justify-between">
                   <span className="font-medium text-sm text-gray-700 truncate pr-2">{conv.title}</span>
@@ -886,12 +884,10 @@ const ChatDemo: React.FC = () => {
             <div className="grid grid-cols-3 gap-2">
               {(activeMode === 'image' ? imageModels : textModels).map((model) => (
                 <button key={model.id} onClick={() => toggleModel(model.id, activeMode === 'image')}
-                  className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-sm transition-all ${
-                    model.selected ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-gray-100 bg-gray-50 text-gray-600 hover:bg-white'
-                  }`}>
-                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                    model.selected ? 'bg-blue-500 border-blue-500' : 'border-gray-300'
-                  }`}>
+                  className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-sm transition-all ${model.selected ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-gray-100 bg-gray-50 text-gray-600 hover:bg-white'
+                    }`}>
+                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${model.selected ? 'bg-blue-500 border-blue-500' : 'border-gray-300'
+                    }`}>
                     {model.selected && <Check className="w-2.5 h-2.5 text-white" />}
                   </div>
                   <span className="truncate">{model.name}</span>
@@ -913,14 +909,14 @@ const ChatDemo: React.FC = () => {
               </button>
             </div>
             <div className="flex gap-2 mb-3">
-              <input 
-                type="text" 
-                placeholder="搜索提示词..." 
+              <input
+                type="text"
+                placeholder="搜索提示词..."
                 value={promptSearchQuery}
                 onChange={(e) => setPromptSearchQuery(e.target.value)}
-                className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-100" 
+                className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-100"
               />
-              <select 
+              <select
                 value={promptCategory}
                 onChange={(e) => setPromptCategory(e.target.value)}
                 className="px-3 py-2 border border-gray-200 rounded-xl text-sm bg-white"
@@ -972,9 +968,8 @@ const ChatDemo: React.FC = () => {
             <div className="space-y-2 max-h-64 overflow-y-auto">
               {systemPrompts.map((prompt) => (
                 <button key={prompt.id} onClick={() => { setSelectedPromptId(prompt.id); setActivePanel('none'); }}
-                  className={`w-full text-left px-4 py-3 rounded-xl transition-all ${
-                    selectedPromptId === prompt.id ? 'bg-purple-50 border border-purple-200' : 'bg-gray-50 hover:bg-gray-100 border border-transparent'
-                  }`}>
+                  className={`w-full text-left px-4 py-3 rounded-xl transition-all ${selectedPromptId === prompt.id ? 'bg-purple-50 border border-purple-200' : 'bg-gray-50 hover:bg-gray-100 border border-transparent'
+                    }`}>
                   <div className="font-medium text-sm text-gray-700">{prompt.name}</div>
                   <div className="text-xs text-gray-400 truncate mt-0.5">{prompt.prompt}</div>
                 </button>
@@ -1000,7 +995,7 @@ const ChatDemo: React.FC = () => {
                 {glassMosaicResult ? (
                   <div className="relative rounded-xl overflow-hidden bg-gray-100">
                     <img src={glassMosaicResult} alt="Glass Mosaic Result" className="w-full h-48 object-contain" />
-                    <button 
+                    <button
                       onClick={() => { setGlassMosaicImage(null); setGlassMosaicResult(null); }}
                       className="absolute top-2 right-2 p-1 bg-gray-900/80 text-white rounded-full hover:bg-gray-900"
                     >
@@ -1020,9 +1015,9 @@ const ChatDemo: React.FC = () => {
                   <label className="border-2 border-dashed border-gray-200 rounded-xl p-8 h-48 flex flex-col items-center justify-center text-gray-400 hover:border-indigo-400 cursor-pointer transition">
                     <Upload className="w-8 h-8 mb-2" />
                     <span className="text-sm">上传图片</span>
-                    <input 
-                      type="file" 
-                      className="hidden" 
+                    <input
+                      type="file"
+                      className="hidden"
                       accept="image/*"
                       onChange={(e) => {
                         const file = e.target.files?.[0];
@@ -1034,7 +1029,7 @@ const ChatDemo: React.FC = () => {
                 {/* 隐藏的 canvas 用于渲染 */}
                 <canvas ref={glassMosaicCanvasRef} className="hidden" />
               </div>
-              
+
               {/* 参数控制区域 */}
               <div className="space-y-3">
                 <div>
@@ -1042,11 +1037,11 @@ const ChatDemo: React.FC = () => {
                     <span>网格尺寸</span>
                     <span>{glassMosaicOptions.cellSize}px</span>
                   </label>
-                  <input 
-                    type="range" 
-                    className="w-full" 
-                    min={5} 
-                    max={50} 
+                  <input
+                    type="range"
+                    className="w-full"
+                    min={5}
+                    max={50}
                     value={glassMosaicOptions.cellSize}
                     onChange={(e) => setGlassMosaicOptions(prev => ({ ...prev, cellSize: Number(e.target.value) }))}
                   />
@@ -1056,11 +1051,11 @@ const ChatDemo: React.FC = () => {
                     <span>透明度</span>
                     <span>{Math.round(glassMosaicOptions.glassOpacity * 100)}%</span>
                   </label>
-                  <input 
-                    type="range" 
-                    className="w-full" 
-                    min={0} 
-                    max={100} 
+                  <input
+                    type="range"
+                    className="w-full"
+                    min={0}
+                    max={100}
                     value={glassMosaicOptions.glassOpacity * 100}
                     onChange={(e) => setGlassMosaicOptions(prev => ({ ...prev, glassOpacity: Number(e.target.value) / 100 }))}
                   />
@@ -1070,39 +1065,37 @@ const ChatDemo: React.FC = () => {
                     <span>边缘深度</span>
                     <span>{Math.round(glassMosaicOptions.bevelIntensity * 100)}%</span>
                   </label>
-                  <input 
-                    type="range" 
-                    className="w-full" 
-                    min={0} 
-                    max={100} 
+                  <input
+                    type="range"
+                    className="w-full"
+                    min={0}
+                    max={100}
                     value={glassMosaicOptions.bevelIntensity * 100}
                     onChange={(e) => setGlassMosaicOptions(prev => ({ ...prev, bevelIntensity: Number(e.target.value) / 100 }))}
                   />
                 </div>
                 <div className="flex gap-2">
-                  <button 
+                  <button
                     onClick={() => setGlassMosaicOptions(prev => ({ ...prev, renderShape: 'square' }))}
-                    className={`flex-1 py-2 text-xs rounded-lg border transition ${
-                      glassMosaicOptions.renderShape === 'square' 
-                        ? 'border-indigo-300 text-indigo-600 bg-indigo-50' 
-                        : 'border-gray-200 text-gray-500 hover:bg-gray-50'
-                    }`}
+                    className={`flex-1 py-2 text-xs rounded-lg border transition ${glassMosaicOptions.renderShape === 'square'
+                      ? 'border-indigo-300 text-indigo-600 bg-indigo-50'
+                      : 'border-gray-200 text-gray-500 hover:bg-gray-50'
+                      }`}
                   >
                     方块
                   </button>
-                  <button 
+                  <button
                     onClick={() => setGlassMosaicOptions(prev => ({ ...prev, renderShape: 'circle' }))}
-                    className={`flex-1 py-2 text-xs rounded-lg border transition ${
-                      glassMosaicOptions.renderShape === 'circle' 
-                        ? 'border-indigo-300 text-indigo-600 bg-indigo-50' 
-                        : 'border-gray-200 text-gray-500 hover:bg-gray-50'
-                    }`}
+                    className={`flex-1 py-2 text-xs rounded-lg border transition ${glassMosaicOptions.renderShape === 'circle'
+                      ? 'border-indigo-300 text-indigo-600 bg-indigo-50'
+                      : 'border-gray-200 text-gray-500 hover:bg-gray-50'
+                      }`}
                   >
                     圆形
                   </button>
                 </div>
                 {glassMosaicResult && (
-                  <button 
+                  <button
                     onClick={downloadGlassMosaicResult}
                     className="w-full py-2 text-xs rounded-lg bg-indigo-500 text-white hover:bg-indigo-600 flex items-center justify-center gap-2"
                   >
@@ -1124,7 +1117,7 @@ const ChatDemo: React.FC = () => {
                 <X className="w-4 h-4 text-gray-400" />
               </button>
             </div>
-            
+
             {/* 知识库面板 */}
             {showKnowledgePanel ? (
               <div className="space-y-3">
@@ -1135,7 +1128,7 @@ const ChatDemo: React.FC = () => {
                   </label>
                   <span className="text-xs text-gray-400">{knowledgeContext.length} 字</span>
                 </div>
-                <textarea 
+                <textarea
                   value={knowledgeContext}
                   onChange={(e) => setKnowledgeContext(e.target.value)}
                   placeholder="输入或粘贴上下文内容，AI 将基于此知识进行回答..."
@@ -1145,13 +1138,13 @@ const ChatDemo: React.FC = () => {
                   <p className="text-xs text-amber-500">⚠️ 上下文较长，可能影响响应质量</p>
                 )}
                 <div className="flex gap-2">
-                  <button 
+                  <button
                     onClick={() => setShowKnowledgePanel(false)}
                     className="flex-1 py-2 text-xs rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50"
                   >
                     返回
                   </button>
-                  <button 
+                  <button
                     onClick={() => { setShowKnowledgePanel(false); setActivePanel('none'); }}
                     className="flex-1 py-2 text-xs rounded-lg bg-green-500 text-white hover:bg-green-600"
                   >
@@ -1161,7 +1154,7 @@ const ChatDemo: React.FC = () => {
               </div>
             ) : (
               <div className="grid grid-cols-3 gap-3">
-                <button 
+                <button
                   onClick={() => setShowKnowledgePanel(true)}
                   className="flex flex-col items-center gap-2 p-4 rounded-xl hover:bg-gray-50 transition group"
                 >
@@ -1180,7 +1173,7 @@ const ChatDemo: React.FC = () => {
                   <span className="text-xs font-medium text-gray-700">Workflow</span>
                   <span className="text-xs text-gray-400">工作流预设</span>
                 </button>
-                <button 
+                <button
                   onClick={() => { setActivePanel('none'); setTimeout(() => openImageEditor('', 'refine'), 100); }}
                   className="flex flex-col items-center gap-2 p-4 rounded-xl hover:bg-gray-50 transition group"
                 >
@@ -1203,7 +1196,7 @@ const ChatDemo: React.FC = () => {
     <div className="p-4 pb-6">
       <div className="max-w-3xl mx-auto relative">
         {renderToolPanel()}
-        
+
         {/* 离线提示 */}
         {!isOnline && (
           <div className="mb-3 px-4 py-2 bg-amber-50 border border-amber-200 rounded-2xl flex items-center gap-2 text-amber-700">
@@ -1211,7 +1204,7 @@ const ChatDemo: React.FC = () => {
             <span className="text-sm">网络已断开，请检查网络连接</span>
           </div>
         )}
-        
+
         {/* 主输入框 */}
         <div className="bg-white rounded-3xl shadow-lg shadow-gray-200/50 border border-gray-100 overflow-hidden">
           {/* 参考图预览 */}
@@ -1219,7 +1212,7 @@ const ChatDemo: React.FC = () => {
             <div className="px-4 pt-4 flex items-center gap-3">
               <div className="relative group">
                 <img src={referenceImage} alt="Reference" className="w-16 h-16 object-cover rounded-xl border border-gray-100" />
-                <button onClick={() => setReferenceImage(null)} 
+                <button onClick={() => setReferenceImage(null)}
                   className="absolute -top-2 -right-2 p-1 bg-gray-900 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
                   <X className="w-3 h-3" />
                 </button>
@@ -1227,11 +1220,11 @@ const ChatDemo: React.FC = () => {
               <span className="text-sm text-gray-500">参考图已添加</span>
             </div>
           )}
-          
+
           {/* 输入框 */}
           <div className="px-5 py-4">
-            <textarea 
-              value={inputText} 
+            <textarea
+              value={inputText}
               onChange={(e) => setInputText(e.target.value)}
               placeholder='发消息或输入 "/" 选择技能'
               className="w-full bg-transparent resize-none outline-none text-gray-700 placeholder-gray-400 text-[15px] min-h-[24px] max-h-32"
@@ -1239,7 +1232,7 @@ const ChatDemo: React.FC = () => {
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
             />
           </div>
-          
+
           {/* 底部工具栏 */}
           <div className="px-4 pb-4 flex items-center justify-between">
             <div className="flex items-center gap-1">
@@ -1262,9 +1255,9 @@ const ChatDemo: React.FC = () => {
                   }
                 }} />
               </label>
-              
+
               {/* URL 输入 */}
-              <button 
+              <button
                 onClick={async () => {
                   const url = prompt('输入图片 URL:');
                   if (url && isValidImageUrl(url)) {
@@ -1286,38 +1279,36 @@ const ChatDemo: React.FC = () => {
               >
                 <Link className="w-5 h-5 text-gray-400" />
               </button>
-              
+
               <div className="w-px h-5 bg-gray-200 mx-1" />
-              
+
               {/* 工具按钮 */}
               {TOOL_BUTTONS.map((tool) => (
                 <button key={tool.id} onClick={() => handleToolClick(tool.id)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm transition-all hover:bg-gray-100 ${
-                    (tool.id === 'text-chat' && activeMode === 'text') ||
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm transition-all hover:bg-gray-100 ${(tool.id === 'text-chat' && activeMode === 'text') ||
                     (tool.id === 'image-gen' && activeMode === 'image') ||
                     (tool.id === 'prompt-market' && activePanel === 'promptMarket') ||
                     (tool.id === 'system-prompt' && activePanel === 'systemPrompt') ||
                     (tool.id === 'glass-mosaic' && activePanel === 'glassMosaic')
-                      ? 'bg-gray-100 text-gray-700' : 'text-gray-500'
-                  }`}>
+                    ? 'bg-gray-100 text-gray-700' : 'text-gray-500'
+                    }`}>
                   <tool.icon className={`w-4 h-4 ${tool.color}`} />
                   <span className="hidden sm:inline">{tool.label}</span>
                 </button>
               ))}
             </div>
-            
+
             {/* 发送按钮 */}
             <button onClick={handleSend} disabled={!inputText.trim() || isGenerating || !isOnline}
-              className={`p-2.5 rounded-xl transition-all ${
-                inputText.trim() && !isGenerating && isOnline
-                  ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30 hover:bg-blue-600'
-                  : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-              }`}>
+              className={`p-2.5 rounded-xl transition-all ${inputText.trim() && !isGenerating && isOnline
+                ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30 hover:bg-blue-600'
+                : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                }`}>
               {isGenerating ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
             </button>
           </div>
         </div>
-        
+
         <p className="text-center text-xs text-gray-400 mt-3">
           {activeMode === 'image' ? `图像模式 · ${selectedImageCount} 个模型` : `文本模式 · ${selectedTextCount} 个模型`} · 按 Enter 发送
         </p>
@@ -1328,15 +1319,15 @@ const ChatDemo: React.FC = () => {
   // ========== 渲染：图像操作按钮 ==========
   const renderImageActions = (imageUrl: string) => (
     <div className="flex gap-2 p-3 border-t border-gray-100">
-      <button onClick={(e) => { e.stopPropagation(); openImageEditor(imageUrl, 'refine'); }} 
+      <button onClick={(e) => { e.stopPropagation(); openImageEditor(imageUrl, 'refine'); }}
         className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-purple-50 text-purple-600 rounded-xl text-xs font-medium hover:bg-purple-100 transition">
         <Wand2 className="w-3.5 h-3.5" />Refine
       </button>
-      <button onClick={(e) => { e.stopPropagation(); openImageEditor(imageUrl, 'inpaint'); }} 
+      <button onClick={(e) => { e.stopPropagation(); openImageEditor(imageUrl, 'inpaint'); }}
         className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-blue-50 text-blue-600 rounded-xl text-xs font-medium hover:bg-blue-100 transition">
         <Edit2 className="w-3.5 h-3.5" />Inpaint
       </button>
-      <button onClick={(e) => { e.stopPropagation(); openImageEditor(imageUrl, 'remix'); }} 
+      <button onClick={(e) => { e.stopPropagation(); openImageEditor(imageUrl, 'remix'); }}
         className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-green-50 text-green-600 rounded-xl text-xs font-medium hover:bg-green-100 transition">
         <Sliders className="w-3.5 h-3.5" />Remix
       </button>
@@ -1379,7 +1370,7 @@ const ChatDemo: React.FC = () => {
                   {response.status === 'streaming' || response.status === 'pending' ? (
                     <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
                   ) : response.status === 'error' ? (
-                    <button 
+                    <button
                       onClick={() => handleRetryTextModel(response.modelId, response.modelName)}
                       className="p-1.5 hover:bg-red-50 rounded-lg"
                       title="重试"
@@ -1388,14 +1379,14 @@ const ChatDemo: React.FC = () => {
                     </button>
                   ) : (
                     <div className="flex gap-1">
-                      <button 
+                      <button
                         onClick={() => handleCopyText(response.content)}
                         className="p-1.5 hover:bg-gray-100 rounded-lg"
                         title="复制"
                       >
                         <Copy className="w-3.5 h-3.5 text-gray-400" />
                       </button>
-                      <button 
+                      <button
                         onClick={() => handleRetryTextModel(response.modelId, response.modelName)}
                         className="p-1.5 hover:bg-gray-100 rounded-lg"
                         title="重试"
@@ -1436,12 +1427,11 @@ const ChatDemo: React.FC = () => {
           /* 图像模式结果 */
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {imageResponses.map((response) => (
-              <div 
-                key={response.modelId} 
+              <div
+                key={response.modelId}
                 onClick={() => response.status === 'complete' && setSelectedResultImage(response.modelId)}
-                className={`bg-white rounded-2xl border overflow-hidden transition cursor-pointer ${
-                  selectedResultImage === response.modelId ? 'border-blue-300 ring-4 ring-blue-100 shadow-lg' : 'border-gray-100 shadow-sm hover:shadow-md'
-                }`}
+                className={`bg-white rounded-2xl border overflow-hidden transition cursor-pointer ${selectedResultImage === response.modelId ? 'border-blue-300 ring-4 ring-blue-100 shadow-lg' : 'border-gray-100 shadow-sm hover:shadow-md'
+                  }`}
               >
                 <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -1451,7 +1441,7 @@ const ChatDemo: React.FC = () => {
                   {response.status === 'streaming' || response.status === 'pending' ? (
                     <Loader2 className="w-4 h-4 text-pink-500 animate-spin" />
                   ) : response.status === 'error' ? (
-                    <button 
+                    <button
                       onClick={(e) => { e.stopPropagation(); handleRetryImageModel(response.modelId, response.modelName); }}
                       className="p-1.5 hover:bg-red-50 rounded-lg"
                       title="重试"
@@ -1459,7 +1449,7 @@ const ChatDemo: React.FC = () => {
                       <RotateCcw className="w-3.5 h-3.5 text-red-400" />
                     </button>
                   ) : response.image ? (
-                    <button 
+                    <button
                       onClick={(e) => { e.stopPropagation(); handleDownloadImage(response.image!.url, response.modelName); }}
                       className="p-1.5 hover:bg-gray-100 rounded-lg"
                       title="下载"
@@ -1524,21 +1514,20 @@ const ChatDemo: React.FC = () => {
               </div>
               <p className="text-xs text-gray-400 mb-3">在图像上绘制需要修改的区域</p>
               <div className="flex gap-3">
-                <input 
-                  type="text" 
-                  placeholder="描述修改意图..." 
+                <input
+                  type="text"
+                  placeholder="描述修改意图..."
                   value={inpaintInstruction}
                   onChange={(e) => setInpaintInstruction(e.target.value)}
-                  className="flex-1 px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-100" 
+                  className="flex-1 px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-100"
                 />
-                <button 
+                <button
                   onClick={handleInpaint}
                   disabled={!inpaintMask || !inpaintInstruction.trim() || isInpainting}
-                  className={`px-6 py-3 rounded-2xl font-medium flex items-center gap-2 ${
-                    inpaintMask && inpaintInstruction.trim() && !isInpainting
-                      ? 'bg-blue-500 text-white hover:bg-blue-600'
-                      : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                  }`}
+                  className={`px-6 py-3 rounded-2xl font-medium flex items-center gap-2 ${inpaintMask && inpaintInstruction.trim() && !isInpainting
+                    ? 'bg-blue-500 text-white hover:bg-blue-600'
+                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                    }`}
                 >
                   {isInpainting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                   {isInpainting ? '处理中...' : '确认'}
@@ -1587,7 +1576,7 @@ const ChatDemo: React.FC = () => {
                       strokeColor="rgba(255, 0, 0, 0.5)"
                       lineWidth={15}
                     />
-                    <button 
+                    <button
                       onClick={() => setRemixReferenceImage(null)}
                       className="absolute top-2 right-2 p-1 bg-gray-900/80 text-white rounded-full hover:bg-gray-900"
                     >
@@ -1600,9 +1589,9 @@ const ChatDemo: React.FC = () => {
                       <Upload className="w-8 h-8 mx-auto mb-2" />
                       <span className="text-sm">上传参考图</span>
                     </div>
-                    <input 
-                      type="file" 
-                      className="hidden" 
+                    <input
+                      type="file"
+                      className="hidden"
                       accept="image/*"
                       onChange={(e) => {
                         const file = e.target.files?.[0];
@@ -1614,21 +1603,20 @@ const ChatDemo: React.FC = () => {
               </div>
             </div>
             <div className="p-5 border-t border-gray-100 flex gap-3">
-              <input 
-                type="text" 
-                placeholder="描述迁移意图..." 
+              <input
+                type="text"
+                placeholder="描述迁移意图..."
                 value={remixInstruction}
                 onChange={(e) => setRemixInstruction(e.target.value)}
-                className="flex-1 px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-green-100" 
+                className="flex-1 px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-green-100"
               />
-              <button 
+              <button
                 onClick={handleRemix}
                 disabled={!remixReferenceImage || !remixInstruction.trim() || isRemixing}
-                className={`px-6 py-3 rounded-2xl font-medium flex items-center gap-2 ${
-                  remixReferenceImage && remixInstruction.trim() && !isRemixing
-                    ? 'bg-green-500 text-white hover:bg-green-600'
-                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                }`}
+                className={`px-6 py-3 rounded-2xl font-medium flex items-center gap-2 ${remixReferenceImage && remixInstruction.trim() && !isRemixing
+                  ? 'bg-green-500 text-white hover:bg-green-600'
+                  : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                  }`}
               >
                 {isRemixing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                 {isRemixing ? '处理中...' : '确认'}
@@ -1653,14 +1641,14 @@ const ChatDemo: React.FC = () => {
             <div className="p-5 space-y-4">
               <div>
                 <label className="text-xs text-gray-500 font-medium mb-2 block">当前提示词</label>
-                <textarea 
+                <textarea
                   value={refinePrompt}
                   onChange={(e) => setRefinePrompt(e.target.value)}
-                  className="w-full h-28 px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl resize-none focus:outline-none focus:ring-2 focus:ring-purple-100" 
-                  placeholder="输入提示词..." 
+                  className="w-full h-28 px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl resize-none focus:outline-none focus:ring-2 focus:ring-purple-100"
+                  placeholder="输入提示词..."
                 />
               </div>
-              
+
               {/* 优化建议列表 */}
               {refineSuggestions.length > 0 && (
                 <div>
@@ -1670,22 +1658,20 @@ const ChatDemo: React.FC = () => {
                       <button
                         key={index}
                         onClick={() => {
-                          setSelectedRefineSuggestions(prev => 
-                            prev.includes(index) 
+                          setSelectedRefineSuggestions(prev =>
+                            prev.includes(index)
                               ? prev.filter(i => i !== index)
                               : [...prev, index]
                           );
                         }}
-                        className={`w-full text-left p-3 rounded-xl text-sm transition-all ${
-                          selectedRefineSuggestions.includes(index)
-                            ? 'bg-purple-50 border border-purple-200'
-                            : 'bg-gray-50 border border-transparent hover:bg-gray-100'
-                        }`}
+                        className={`w-full text-left p-3 rounded-xl text-sm transition-all ${selectedRefineSuggestions.includes(index)
+                          ? 'bg-purple-50 border border-purple-200'
+                          : 'bg-gray-50 border border-transparent hover:bg-gray-100'
+                          }`}
                       >
                         <div className="flex items-start gap-2">
-                          <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center mt-0.5 ${
-                            selectedRefineSuggestions.includes(index) ? 'bg-purple-500 border-purple-500' : 'border-gray-300'
-                          }`}>
+                          <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center mt-0.5 ${selectedRefineSuggestions.includes(index) ? 'bg-purple-500 border-purple-500' : 'border-gray-300'
+                            }`}>
                             {selectedRefineSuggestions.includes(index) && <Check className="w-2.5 h-2.5 text-white" />}
                           </div>
                           <span className="flex-1 text-gray-600">{suggestion}</span>
@@ -1695,28 +1681,26 @@ const ChatDemo: React.FC = () => {
                   </div>
                 </div>
               )}
-              
+
               <div className="flex gap-3">
-                <button 
+                <button
                   onClick={handleGenerateRefineSuggestions}
                   disabled={!refinePrompt.trim() || isRefining}
-                  className={`px-5 py-3 rounded-2xl flex items-center gap-2 ${
-                    refinePrompt.trim() && !isRefining
-                      ? 'bg-purple-500 text-white hover:bg-purple-600'
-                      : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                  }`}
+                  className={`px-5 py-3 rounded-2xl flex items-center gap-2 ${refinePrompt.trim() && !isRefining
+                    ? 'bg-purple-500 text-white hover:bg-purple-600'
+                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                    }`}
                 >
                   {isRefining ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
                   {isRefining ? '优化中...' : 'AI 智能优化'}
                 </button>
-                <button 
+                <button
                   onClick={handleApplyRefineSuggestions}
                   disabled={selectedRefineSuggestions.length === 0}
-                  className={`px-5 py-3 rounded-2xl font-medium ml-auto ${
-                    selectedRefineSuggestions.length > 0
-                      ? 'bg-gray-900 text-white hover:bg-gray-800'
-                      : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                  }`}
+                  className={`px-5 py-3 rounded-2xl font-medium ml-auto ${selectedRefineSuggestions.length > 0
+                    ? 'bg-gray-900 text-white hover:bg-gray-800'
+                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                    }`}
                 >
                   应用选中
                 </button>

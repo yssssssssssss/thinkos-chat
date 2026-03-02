@@ -77,17 +77,17 @@ const extractMimeType = (dataUrl: string): string => {
 const ensureDataUrl = (imageData: string, mimeType: string = 'image/png'): string => {
   const trimmed = (imageData || '').trim();
   if (!trimmed) return '';
-  
+
   // 已经是 data URL
   if (trimmed.startsWith('data:')) {
     return trimmed;
   }
-  
+
   // HTTP URL
   if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
     return trimmed;
   }
-  
+
   // 检测 base64 图像类型
   let detectedMime = mimeType;
   if (trimmed.startsWith('/9j/')) {
@@ -99,7 +99,7 @@ const ensureDataUrl = (imageData: string, mimeType: string = 'image/png'): strin
   } else if (trimmed.startsWith('UklGR')) {
     detectedMime = 'image/webp';
   }
-  
+
   console.log('[ensureDataUrl] Converting base64 to data URL, detected mime:', detectedMime, 'length:', trimmed.length);
   return `data:${detectedMime};base64,${trimmed}`;
 };
@@ -190,17 +190,17 @@ const buildGeminiImagePart = (value: string, isJdcloud: boolean): GeminiPart | n
   if (isHttpUrl(trimmed)) {
     return isJdcloud
       ? {
-          file_data: {
-            mime_type: 'image/png',
-            file_uri: trimmed
-          }
+        file_data: {
+          mime_type: 'image/png',
+          file_uri: trimmed
         }
+      }
       : {
-          fileData: {
-            mimeType: 'image/png',
-            fileUri: trimmed
-          }
-        };
+        fileData: {
+          mimeType: 'image/png',
+          fileUri: trimmed
+        }
+      };
   }
 
   const normalized = normalizeSeedreamImageValue(trimmed);
@@ -247,7 +247,7 @@ const extractImageFromParts = (parts?: GeminiPart[] | GeminiPart): string | null
       console.log('[Gemini Image Service] Found fallback URL');
       return ensureDataUrl(fallbackUrl.trim());
     }
-    
+
     // 检查是否有 text 字段（可能是文本响应而非图像）
     if ((part as any).text) {
       console.log('[Gemini Image Service] Part contains text:', (part as any).text.slice(0, 200));
@@ -311,7 +311,7 @@ const extractImageFromGeminiResponse = (data: any): string | null => {
           return extracted;
         }
       }
-      
+
       // 检查 candidate 直接包含图像数据的情况
       const candidateImage = pickFirstImageField(candidate, ['image', 'b64_json', 'image_base64', 'base64']);
       if (candidateImage) {
@@ -418,12 +418,12 @@ const parseApiError = (errorText: string): string => {
     if (errorData?.error?.message) {
       const code = errorData.error.code || '';
       const message = errorData.error.message;
-      
+
       // 敏感内容检测
       if (code === 'InputTextSensitiveContentDetected' || message.includes('sensitive')) {
         return '内容审核未通过：输入的提示词可能包含敏感内容（如版权角色、不当内容等），请修改后重试';
       }
-      
+
       return message;
     }
     if (errorData?.message) {
@@ -484,7 +484,7 @@ const requestJimengImage = async (requestBody: Record<string, unknown>, action: 
 const generateImageWithJimeng = async (
   prompt: string,
   inputImage?: ImageInput,
-  model: string = 'doubao-seedream-4-0-250828'
+  model: string = 'doubao-seedream-4-5-251128'
 ): Promise<string> => {
   console.log('[Jimeng Image Service] Generating image:', { model, prompt: prompt.slice(0, 50) });
 
@@ -618,18 +618,18 @@ export const generateImagesFromWorkflow = async (
     console.log(`[Image Service] Starting generation for model: ${modelConfig.id}`);
     try {
       let imageUrl: string;
-      
+
       // 根据模型 ID 选择对应的 API
-      if (modelConfig.id === 'doubao-seedream-4-0-250828') {
+      if (modelConfig.id === 'doubao-seedream-4-0-250828' || modelConfig.id === 'doubao-seedream-4-5-251128') {
         // 即梦 API (使用 minimax_image01 端点)
         imageUrl = await generateImageWithJimeng(prompt, inputImage, modelConfig.id);
       } else {
         // Gemini API
         imageUrl = await generateImageWithGeminiFlash(prompt, inputImage, modelConfig.id);
       }
-      
+
       console.log(`[Image Service] Got imageUrl for ${modelConfig.id}, length: ${imageUrl?.length || 0}`);
-      
+
       if (imageUrl) {
         const result: GeneratedImage = {
           id: crypto.randomUUID(),

@@ -9,6 +9,10 @@ import { TextModelResponse, ImageModelResponse } from '../../../services/multiMo
 import { Message } from '../../../services/conversationService';
 import { MarkdownLight } from '../../../components/MarkdownLight';
 
+// 判断 URL 是否为视频
+const isVideoUrl = (url: string): boolean =>
+  /\.(mp4|mov|webm|avi|mkv)(\?|$)/i.test(url) || url.toLowerCase().includes('video');
+
 type ModeType = 'text' | 'image';
 
 // 历史消息中的响应类型
@@ -54,53 +58,53 @@ const ImagePreviewModal: React.FC<{
   onDownload: () => void;
   onImageAction: (action: 'refine' | 'inpaint' | 'remix') => void;
 }> = ({ imageUrl, modelName, onClose, onDownload, onImageAction }) => (
-  <div 
+  <div
     className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
     onClick={onClose}
   >
     <div className="relative max-w-[90vw] max-h-[90vh]" onClick={(e: React.MouseEvent) => e.stopPropagation()}>
       {/* 关闭按钮 */}
-      <button 
+      <button
         onClick={onClose}
         className="absolute -top-12 right-0 p-2 text-white/80 hover:text-white transition"
       >
         <X className="w-6 h-6" />
       </button>
-      
+
       {/* 图片 */}
-      <img 
-        src={imageUrl} 
+      <img
+        src={imageUrl}
         alt={modelName}
         className="max-w-full max-h-[75vh] object-contain rounded-lg shadow-2xl"
       />
-      
+
       {/* 底部工具栏 */}
       <div className="absolute -bottom-16 left-0 right-0 flex flex-col items-center gap-3">
         <span className="text-white/60 text-sm">{modelName}</span>
         <div className="flex items-center gap-2">
           {/* 编辑按钮 */}
-          <button 
+          <button
             onClick={() => { onImageAction('refine'); onClose(); }}
             className="flex items-center gap-2 px-4 py-2 bg-purple-500/80 hover:bg-purple-500 text-white rounded-lg transition"
           >
             <Wand2 className="w-4 h-4" />
             Refine
           </button>
-          <button 
+          <button
             onClick={() => { onImageAction('inpaint'); onClose(); }}
             className="flex items-center gap-2 px-4 py-2 bg-blue-500/80 hover:bg-blue-500 text-white rounded-lg transition"
           >
             <Edit2 className="w-4 h-4" />
             Inpaint
           </button>
-          <button 
+          <button
             onClick={() => { onImageAction('remix'); onClose(); }}
             className="flex items-center gap-2 px-4 py-2 bg-green-500/80 hover:bg-green-500 text-white rounded-lg transition"
           >
             <Sliders className="w-4 h-4" />
             Remix
           </button>
-          <button 
+          <button
             onClick={onDownload}
             className="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition"
           >
@@ -145,15 +149,15 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   // 渲染图像操作按钮
   const renderImageActions = (imageUrl: string) => (
     <div className="flex gap-2 p-3 border-t border-gray-100">
-      <button onClick={(e: React.MouseEvent) => { e.stopPropagation(); onImageAction(imageUrl, 'refine'); }} 
+      <button onClick={(e: React.MouseEvent) => { e.stopPropagation(); onImageAction(imageUrl, 'refine'); }}
         className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-purple-50 text-purple-600 rounded-xl text-xs font-medium hover:bg-purple-100 transition">
         <Wand2 className="w-3.5 h-3.5" />Refine
       </button>
-      <button onClick={(e: React.MouseEvent) => { e.stopPropagation(); onImageAction(imageUrl, 'inpaint'); }} 
+      <button onClick={(e: React.MouseEvent) => { e.stopPropagation(); onImageAction(imageUrl, 'inpaint'); }}
         className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-blue-50 text-blue-600 rounded-xl text-xs font-medium hover:bg-blue-100 transition">
         <Edit2 className="w-3.5 h-3.5" />Inpaint
       </button>
-      <button onClick={(e: React.MouseEvent) => { e.stopPropagation(); onImageAction(imageUrl, 'remix'); }} 
+      <button onClick={(e: React.MouseEvent) => { e.stopPropagation(); onImageAction(imageUrl, 'remix'); }}
         className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-green-50 text-green-600 rounded-xl text-xs font-medium hover:bg-green-100 transition">
         <Sliders className="w-3.5 h-3.5" />Remix
       </button>
@@ -185,9 +189,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               <div className="max-w-[70%] bg-blue-500 text-white rounded-2xl rounded-tr-md px-5 py-3 shadow-lg shadow-blue-500/20">
                 <p className="text-[15px] whitespace-pre-wrap">{message.content}</p>
                 {message.referenceImage && (
-                  <img 
-                    src={message.referenceImage} 
-                    alt="Reference" 
+                  <img
+                    src={message.referenceImage}
+                    alt="Reference"
                     className="mt-2 rounded-lg max-w-[512px] max-h-[512px] object-cover cursor-pointer hover:opacity-90 transition"
                     onClick={(e: React.MouseEvent) => {
                       e.stopPropagation();
@@ -209,7 +213,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                       <div className={`w-2 h-2 rounded-full ${response.status === 'complete' ? 'bg-green-400' : 'bg-red-400'}`} />
                       <span className="font-medium text-sm text-gray-700">{response.modelName}</span>
                     </div>
-                    <button 
+                    <button
                       onClick={() => onCopyText(response.content)}
                       className="p-1.5 hover:bg-gray-100 rounded-lg"
                       title="复制"
@@ -236,8 +240,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           {message.role === 'assistant' && message.imageResponses && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {message.imageResponses.map((response: HistoryImageResponse) => (
-                <div 
-                  key={response.modelId} 
+                <div
+                  key={response.modelId}
                   className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm hover:shadow-md transition"
                 >
                   <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
@@ -248,14 +252,14 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     <div className="flex gap-1">
                       {response.imageUrl && (
                         <>
-                          <button 
+                          <button
                             onClick={() => setPreviewImage({ url: response.imageUrl!, modelName: response.modelName })}
                             className="p-1.5 hover:bg-gray-100 rounded-lg"
                             title="预览"
                           >
                             <ZoomIn className="w-3.5 h-3.5 text-gray-400" />
                           </button>
-                          <button 
+                          <button
                             onClick={() => onDownloadImage(response.imageUrl!, response.modelName)}
                             className="p-1.5 hover:bg-gray-100 rounded-lg"
                             title="下载"
@@ -266,7 +270,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                       )}
                     </div>
                   </div>
-                  <div 
+                  <div
                     className="aspect-square bg-gray-100 flex items-center justify-center cursor-pointer"
                     onClick={() => response.imageUrl && setPreviewImage({ url: response.imageUrl, modelName: response.modelName })}
                   >
@@ -275,6 +279,14 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                         <AlertCircle className="w-8 h-8 mx-auto mb-2" />
                         <span className="text-sm">{response.error || '生成失败'}</span>
                       </div>
+                    ) : response.imageUrl && isVideoUrl(response.imageUrl) ? (
+                      <video
+                        src={response.imageUrl}
+                        controls
+                        playsInline
+                        preload="metadata"
+                        className="w-full h-full object-contain bg-black"
+                      />
                     ) : response.imageUrl ? (
                       <img src={response.imageUrl} alt="Generated" className="w-full h-full object-cover" />
                     ) : (
@@ -313,7 +325,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 {response.status === 'streaming' || response.status === 'pending' ? (
                   <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
                 ) : response.status === 'error' ? (
-                  <button 
+                  <button
                     onClick={() => onRetryTextModel(response.modelId, response.modelName)}
                     className="p-1.5 hover:bg-red-50 rounded-lg"
                     title="重试"
@@ -322,14 +334,14 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   </button>
                 ) : (
                   <div className="flex gap-1">
-                    <button 
+                    <button
                       onClick={() => onCopyText(response.content)}
                       className="p-1.5 hover:bg-gray-100 rounded-lg"
                       title="复制"
                     >
                       <Copy className="w-3.5 h-3.5 text-gray-400" />
                     </button>
-                    <button 
+                    <button
                       onClick={() => onRetryTextModel(response.modelId, response.modelName)}
                       className="p-1.5 hover:bg-gray-100 rounded-lg"
                       title="重试"
@@ -372,11 +384,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       {activeMode === 'image' && imageResponses.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {imageResponses.map((response) => (
-            <div 
-              key={response.modelId} 
-              className={`bg-white rounded-2xl border overflow-hidden transition ${
-                selectedResultImage === response.modelId ? 'border-blue-300 ring-4 ring-blue-100 shadow-lg' : 'border-gray-100 shadow-sm hover:shadow-md'
-              }`}
+            <div
+              key={response.modelId}
+              className={`bg-white rounded-2xl border overflow-hidden transition ${selectedResultImage === response.modelId ? 'border-blue-300 ring-4 ring-blue-100 shadow-lg' : 'border-gray-100 shadow-sm hover:shadow-md'
+                }`}
             >
               <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -386,7 +397,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 {response.status === 'streaming' || response.status === 'pending' ? (
                   <Loader2 className="w-4 h-4 text-pink-500 animate-spin" />
                 ) : response.status === 'error' ? (
-                  <button 
+                  <button
                     onClick={() => onRetryImageModel(response.modelId, response.modelName)}
                     className="p-1.5 hover:bg-red-50 rounded-lg"
                     title="重试"
@@ -395,14 +406,14 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   </button>
                 ) : response.image ? (
                   <div className="flex gap-1">
-                    <button 
+                    <button
                       onClick={() => setPreviewImage({ url: response.image!.url, modelName: response.modelName })}
                       className="p-1.5 hover:bg-gray-100 rounded-lg"
                       title="预览"
                     >
                       <ZoomIn className="w-3.5 h-3.5 text-gray-400" />
                     </button>
-                    <button 
+                    <button
                       onClick={() => onDownloadImage(response.image!.url, response.modelName)}
                       className="p-1.5 hover:bg-gray-100 rounded-lg"
                       title="下载"
@@ -412,7 +423,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   </div>
                 ) : null}
               </div>
-              <div 
+              <div
                 className="aspect-square bg-gray-100 flex items-center justify-center cursor-pointer"
                 onClick={() => {
                   if (response.status === 'complete' && response.image) {
